@@ -1,10 +1,9 @@
-dataset_name: ???
-raw_dataset_version: ???
+dataset_name: hirid
+raw_dataset_version: 1.1.1
 
 urls:
   dataset:
-    - EXAMPLE_OPEN_URL
-    - url: EXAMPLE_CONTROLLED_URL
+    - url: https://physionet.org/content/hirid/get-zip/${raw_dataset_version}/
       username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
       password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
   demo:
