@@ -1,5 +1,7 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 import shutil
+import tarfile
+import tempfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -156,7 +158,23 @@ def join_and_get_pseudotime_fntr(
 
 def load_raw_file(fp: Path) -> pl.LazyFrame:
     """Loads a raw file into a Polars DataFrame."""
-    return pl.scan_csv(fp)
+    logger.info(f"Loading {str(fp.resolve())}...")
+    if fp.suffixes == ['.tar', '.gz']:
+        with tarfile.open(fp, 'r:gz') as tar:
+            members = [m for m in tar.getmembers() if m.isfile() and (m.name.endswith('.csv') or m.name.endswith('.parquet'))]
+            if not members:
+                raise ValueError(f"No CSV or Parquet files found in {fp}")
+            for member in members:
+                tar.extract(member, path=fp.parent)
+                extracted_fp = fp.parent / member.name
+                # Load the extracted file into a Polars DataFrame
+            if Path(members[0].name).suffix == '.csv':
+                return pl.scan_csv(extracted_fp)
+            elif Path(members[0].name).suffix == '.parquet':
+                logger.info(fp.parent/Path(members[0].name).parent)
+                return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
+    else:
+        return pl.scan_csv(fp)
 
 
 def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
@@ -231,7 +249,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
         elif pfx not in functions:
-            logger.warning(f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS UNEXPECTED")
+            # logger.warning(f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS UNEXPECTED")
             continue
 
         out_fp = MEDS_input_dir / f"{pfx}.parquet"

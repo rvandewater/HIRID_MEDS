@@ -15,6 +15,15 @@ patient:
     time: col(date_of_birth)
     time_format: "%Y-%m-%d"
 
+raw_stage/pharma_records_parquet:
+  medication:
+    code:
+      - MEDICATION
+      - col(Variable Name)
+    time: col(givenat)
+    time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(givendose)
+    unit: col(Unit)
 #
 #hosp/admissions:
 #  ed_registration:

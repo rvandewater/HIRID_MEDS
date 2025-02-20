@@ -1,14 +1,25 @@
 # OUTPUT DATA cols should never contain case_id or patient_id
 subject_id: "patientid"
 #admission_id: ""
-raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
+raw_data_extensions: [ "*.csv", "*.tar.gz" ]
 
 table_processors:
   reference_data/general_table:
     # Column that contains the offset
-    offset_col: ["admissiontime"]
+    offset_col: [ "admissiontime" ]
     # Output column that contains the pseudotime computed from offset
-    pseudotime_col: ["admissiontime"]
+    pseudotime_col: [ "admissiontime" ]
     # Column that contains ID's to concepts
-    reference_col: []
+    reference_col: [ ]
     # Output data columns
+  raw_stage/pharma_records_parquet:
+    # Column that contains the offset
+    offset_col: [  ]
+    # Output column that contains the pseudotime computed from offset
+    pseudotime_col: []
+    # Column that contains ID's to concepts
+    reference_col: [ 'pharmaid' ]
+    # Output data columns
+    output_data_cols: [ 'givenat','enteredentryat', 'givendose',
+                        'cumulativedose', 'fluidamount_calc', 'cumulfluidamount_calc',
+                        'doseunit', 'route', 'infusionid', 'typeid', 'subtypeid', 'recordstatus', 'Variable Name', 'Unit' ]
