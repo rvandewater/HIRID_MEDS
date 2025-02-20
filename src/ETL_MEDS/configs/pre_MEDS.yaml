@@ -1,12 +1,14 @@
 # OUTPUT DATA cols should never contain case_id or patient_id
-admission_id: ""
-case_id: ""
+subject_id: "patientid"
+#admission_id: ""
 raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
 
-cases:
-  # Column that contains the offset
-  offset_col: ["REPLACE_ME"]
-  # Output column that contains the pseudotime computed from offset
-  pseudotime_col: ["REPLACE_ME"]
-  # Column that contains ID's to concepts
-  reference_col: ["REPLACE_ME"]
+table_processors:
+  reference_data/general_table:
+    # Column that contains the offset
+    offset_col: ["admissiontime"]
+    # Output column that contains the pseudotime computed from offset
+    pseudotime_col: ["admissiontime"]
+    # Column that contains ID's to concepts
+    reference_col: []
+    # Output data columns

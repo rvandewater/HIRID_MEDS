@@ -1,5 +1,5 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
-
+import shutil
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +14,7 @@ from ETL_MEDS import dataset_info, premeds_cfg
 # Name of the dataset
 DATASET_NAME = dataset_info.dataset_name
 # Column name for admission ID associated with this particular admission
-ADMISSION_ID = premeds_cfg.admission_id
+# ADMISSION_ID = premeds_cfg.admission_id
 # Column name for subject ID
 SUBJECT_ID = premeds_cfg.subject_id
 # List of file extensions to be processed
@@ -33,25 +33,21 @@ def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
     The output of this process is ultimately converted to events via the `patient` key in the
     `configs/event_configs.yaml` file.
     """
-    admission_time = pl.datetime()
-    age_in_years = pl.col()
+    admission_time = pl.col("admissiontime").str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S")
+    age_in_years = pl.col("age")
     age_in_days = age_in_years * 365.25
 
     pseudo_date_of_birth = admission_time - pl.duration(days=age_in_days)
-    pseudo_date_of_death = admission_time + pl.duration(seconds=pl.col())
+    # pseudo_date_of_death = admission_time + pl.duration(seconds=pl.col())
 
-    return (
-        df.sort(by="AdmissionYear")
-        .group_by(SUBJECT_ID)
-        .first()
-        .select(
-            SUBJECT_ID,
-            pseudo_date_of_birth.alias("date_of_birth"),
-            admission_time.alias("first_admitted_at_time"),
-            pseudo_date_of_death.alias("date_of_death"),
-        ),
-        df.select(SUBJECT_ID, ADMISSION_ID),
-    )
+    return df.select(#df.sort(by="admissiontime").group_by(SUBJECT_ID).first().select(
+                SUBJECT_ID,
+                pseudo_date_of_birth.alias("date_of_birth"),
+                admission_time.alias("first_admitted_at_time"),
+                "sex",
+                # pseudo_date_of_death.alias("date_of_death"),
+            )
+
 
 
 def join_and_get_pseudotime_fntr(
@@ -150,10 +146,10 @@ def join_and_get_pseudotime_fntr(
         logger.info(f"Joining {table_name} to patient table...")
         logger.info(df.collect_schema())
         # Join the patient table to the data table, INSPIRE only has subject_id as key
-        joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
+        joined = df.join(patient_df.lazy(), on=SUBJECT_ID, how="inner")
         if len(reference_col) > 0:
-            joined = joined.join(references_df, left_on=reference_col, right_on="REPLACE_ME")
-        return joined.select(SUBJECT_ID, ADMISSION_ID, *pseudotimes, *output_data_cols)
+            joined = joined.join(references_df, left_on=reference_col, right_on="ID")
+        return joined.select(SUBJECT_ID, *pseudotimes, *output_data_cols)
 
     return fn
 
@@ -163,16 +159,20 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     return pl.scan_csv(fp)
 
 
-def main(cfg: DictConfig) -> None:
+def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
-    logger.info(f"Loading table preprocessors from {PRE_MEDS_CFG}...")
-    preprocessors = OmegaConf.load(PRE_MEDS_CFG)
+    logger.info(f"Loading table preprocessors from {premeds_cfg.table_processors}...")
+    preprocessors = premeds_cfg.table_processors
     functions = {}
 
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
+    if do_overwrite and MEDS_input_dir.is_dir():
+        logger.warning("do_overwrite is set to True. This will overwrite any existing data.")
+        shutil.rmtree(MEDS_input_dir)
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
+
 
     done_fp = MEDS_input_dir / ".done"
     if done_fp.is_file() and not cfg.do_overwrite:
@@ -192,36 +192,38 @@ def main(cfg: DictConfig) -> None:
         functions[table_name] = join_and_get_pseudotime_fntr(table_name=table_name, **preprocessor_cfg)
 
     unused_tables = {}
-    patient_out_fp = MEDS_input_dir / ""
-    references_out_fp = MEDS_input_dir / ""
+    patient_out_fp = MEDS_input_dir / "patient.parquet"
+    references_out_fp = MEDS_input_dir / "hirid_variable_reference.parquet"
     link_out_fp = MEDS_input_dir / ""
 
-    if patient_out_fp.is_file() and link_out_fp.is_file():
+    if patient_out_fp.is_file(): #and link_out_fp.is_file():
         logger.info(f"Reloading processed patient df from {str(patient_out_fp.resolve())}")
         patient_df = pl.read_parquet(patient_out_fp, use_pyarrow=True)
-        link_df = pl.read_parquet(link_out_fp, use_pyarrow=True)
+        # link_df = pl.read_parquet(link_out_fp, use_pyarrow=True)
     else:
         logger.info("Processing patient table...")
 
-        admissions_fp = Path("")
+        admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv"
         logger.info(f"Loading {str(admissions_fp.resolve())}...")
         raw_admissions_df = load_raw_file(admissions_fp)
-
-        patient_df, link_df = get_patient_link(raw_admissions_df)
+        patient_df = get_patient_link(raw_admissions_df)
+        # logger.info(patient_df.head(10).collect())
         write_lazyframe(patient_df, patient_out_fp)
-        write_lazyframe(link_df, link_out_fp)
+        # patient_df, link_df = #get_patient_link(raw_admissions_df)
+        # write_lazyframe(patient_df, patient_out_fp)
+        # write_lazyframe(link_df, link_out_fp)
 
     if references_out_fp.is_file():
         logger.info(f"Reloading processed references df from {str(references_out_fp.resolve())}")
         references_df = pl.read_parquet(references_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing references table first...")
-        references_fp = Path("")
+        references_fp = Path(input_dir) / "reference_data" / "hirid_variable_reference.csv"
         logger.info(f"Loading {str(references_fp.resolve())}...")
         references_df = load_raw_file(references_fp)
         write_lazyframe(references_df, references_out_fp)
 
-    patient_df = patient_df.join(link_df, on=SUBJECT_ID)
+    # patient_df = patient_df.join(link_df, on=SUBJECT_ID)
 
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
