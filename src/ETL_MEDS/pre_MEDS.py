@@ -169,7 +169,7 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
                 extracted_fp = fp.parent / member.name
                 # Load the extracted file into a Polars DataFrame
             if Path(members[0].name).suffix == '.csv':
-                return pl.scan_csv(extracted_fp)
+                return pl.scan_csv(fp.parent/Path(members[0].name).parent)
             elif Path(members[0].name).suffix == '.parquet':
                 logger.info(fp.parent/Path(members[0].name).parent)
                 return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
@@ -220,8 +220,10 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         # link_df = pl.read_parquet(link_out_fp, use_pyarrow=True)
     else:
         logger.info("Processing patient table...")
-
-        admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv"
+        if not (Path(input_dir) / "reference_data").is_dir():
+            with tarfile.open(str(Path(input_dir) / "reference_data"), 'r:gz') as tar:
+                tar.extractall(path=str(Path(input_dir) / "reference_data"))
+        admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv.gz"
         logger.info(f"Loading {str(admissions_fp.resolve())}...")
         raw_admissions_df = load_raw_file(admissions_fp)
         patient_df = get_patient_link(raw_admissions_df)
