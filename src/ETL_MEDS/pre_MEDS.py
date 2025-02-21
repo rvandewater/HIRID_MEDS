@@ -300,7 +300,6 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp)
         if pfx == "raw_stage/observation_tables_parquet":
-            df = df.head(10000)
             save_last_event(df, patient_df, "type", "datetime", MEDS_input_dir)
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
