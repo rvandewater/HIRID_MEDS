@@ -223,7 +223,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         if not (Path(input_dir) / "reference_data").is_dir():
             with tarfile.open(str(Path(input_dir) / "reference_data.tar.gz"), 'r:gz') as tar:
                 tar.extractall(path=str(Path(input_dir) / "reference_data"))
-        admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv.gz"
+        admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv"
         logger.info(f"Loading {str(admissions_fp.resolve())}...")
         raw_admissions_df = load_raw_file(admissions_fp)
         patient_df = get_patient_link(raw_admissions_df)
