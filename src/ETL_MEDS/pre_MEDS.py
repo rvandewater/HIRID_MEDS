@@ -221,7 +221,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     else:
         logger.info("Processing patient table...")
         if not (Path(input_dir) / "reference_data").is_dir():
-            with tarfile.open(str(Path(input_dir) / "reference_data"), 'r:gz') as tar:
+            with tarfile.open(str(Path(input_dir) / "reference_data.tar.gz"), 'r:gz') as tar:
                 tar.extractall(path=str(Path(input_dir) / "reference_data"))
         admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv.gz"
         logger.info(f"Loading {str(admissions_fp.resolve())}...")
