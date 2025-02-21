@@ -23,7 +23,17 @@ raw_stage/pharma_records_parquet:
     time: col(givenat)
     time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(givendose)
-    unit: col(Unit)
+    text_value: col(Unit)
+
+raw_stage/observation_tables_parquet:
+    observation:
+        code:
+        - OBSERVATION
+        - col(Variable Name)
+        time: col(datetime)
+        time_format: "%Y-%m-%d %H:%M:%S"
+        numeric_value: col(value)
+        text_value: col(stringvalue)
 #
 #hosp/admissions:
 #  ed_registration:

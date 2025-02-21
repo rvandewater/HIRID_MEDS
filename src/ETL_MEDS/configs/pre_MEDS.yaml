@@ -23,3 +23,12 @@ table_processors:
     output_data_cols: [ 'givenat','enteredentryat', 'givendose',
                         'cumulativedose', 'fluidamount_calc', 'cumulfluidamount_calc',
                         'doseunit', 'route', 'infusionid', 'typeid', 'subtypeid', 'recordstatus', 'Variable Name', 'Unit' ]
+  raw_stage/observation_tables_parquet:
+    # Column that contains the offset
+    offset_col: [ ]
+    # Output column that contains the pseudotime computed from offset
+    pseudotime_col: [ ]
+    # Column that contains ID's to concepts
+    reference_col: [ 'variableid' ]
+    # Output data columns
+    output_data_cols: [ 'datetime', 'entertime', 'stringvalue', 'type', 'value', 'Variable Name', 'Unit']
