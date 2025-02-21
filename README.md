@@ -183,3 +183,5 @@ code coverage will be tracked via CodeCov.
 
 Example trusted publisher set-up:
 ![PyPI Trusted Publisher](https://github.com/mmcdermott/ETL_MEDS_Template/blob/main/static/pypi_trusted_publisher_example.png?raw=true)
+
+MEDS_extract-sample_dataset raw_input_dir=~/datasets/physionet.org/files/hirid/1.1.1 root_output_dir=~/datasets/meds/hirid do_download=False

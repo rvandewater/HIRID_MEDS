@@ -11,7 +11,7 @@ from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig, OmegaConf
 
-from ETL_MEDS import dataset_info, premeds_cfg
+from HIRID_MEDS import dataset_info, premeds_cfg
 
 # Name of the dataset
 DATASET_NAME = dataset_info.dataset_name

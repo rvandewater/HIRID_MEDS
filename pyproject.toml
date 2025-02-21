@@ -29,7 +29,7 @@ local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 
 [project.scripts]
-MEDS_extract-sample_dataset = "ETL_MEDS.__main__:main"
+MEDS_extract-HIRID = "HIRID.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/mmcdermott/ETL_MEDS_Template"
