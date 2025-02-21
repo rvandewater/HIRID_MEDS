@@ -6,9 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "ETL-MEDS"
 dynamic = ["version"]
 authors = [
+    {name= "Robin van de Water", email="robin.vandewater@hpi.de"},
   { name="Matthew McDermott", email="mattmcdermott8@gmail.com" },
 ]
-description = "A template ETL pipeline to extract arbitrary data into the MEDS format."
+description = "A template ETL pipeline to extract HIRID data into the MEDS format."
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -29,7 +30,7 @@ local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 
 [project.scripts]
-MEDS_extract-HIRID = "HIRID.__main__:main"
+MEDS_extract-HIRID = "HIRID_MEDS.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/mmcdermott/ETL_MEDS_Template"
