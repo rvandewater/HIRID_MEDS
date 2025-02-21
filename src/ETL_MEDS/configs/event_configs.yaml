@@ -14,6 +14,10 @@ patient:
     code: MEDS_BIRTH
     time: col(date_of_birth)
     time_format: "%Y-%m-%d"
+  death:
+    code: MEDS_DEATH
+    time: col(date_of_death)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 raw_stage/pharma_records_parquet:
   medication:

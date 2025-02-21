@@ -41,12 +41,13 @@ def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
 
     pseudo_date_of_birth = admission_time - pl.duration(days=age_in_days)
     # pseudo_date_of_death = admission_time + pl.duration(seconds=pl.col())
-
+    death_bool = pl.col("discharge_status") != "alive"
     return df.select(#df.sort(by="admissiontime").group_by(SUBJECT_ID).first().select(
                 SUBJECT_ID,
                 pseudo_date_of_birth.alias("date_of_birth"),
                 admission_time.alias("first_admitted_at_time"),
                 "sex",
+                death_bool.alias("died_in_hospital"),
                 # pseudo_date_of_death.alias("date_of_death"),
             )
 
@@ -160,21 +161,54 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     """Loads a raw file into a Polars DataFrame."""
     logger.info(f"Loading {str(fp.resolve())}...")
     if fp.suffixes == ['.tar', '.gz']:
-        with tarfile.open(fp, 'r:gz') as tar:
-            members = [m for m in tar.getmembers() if m.isfile() and (m.name.endswith('.csv') or m.name.endswith('.parquet'))]
-            if not members:
-                raise ValueError(f"No CSV or Parquet files found in {fp}")
-            for member in members:
-                tar.extract(member, path=fp.parent)
-                extracted_fp = fp.parent / member.name
-                # Load the extracted file into a Polars DataFrame
-            if Path(members[0].name).suffix == '.csv':
-                return pl.scan_csv(fp.parent/Path(members[0].name).parent)
-            elif Path(members[0].name).suffix == '.parquet':
-                logger.info(fp.parent/Path(members[0].name).parent)
-                return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
+        output_path = fp.with_suffix("").with_suffix("")
+        if '_' in output_path.name:
+            stripped_part = output_path.name.split('_')[-1]
+            output_path = output_path.with_name('_'.join(output_path.name.split('_')[:-1]))
+        else:
+            stripped_part = output_path.name
+        stripped_path = output_path.with_name(stripped_part)
+
+        if not output_path.is_dir():
+            logger.info(f"Extracting {fp} to {output_path}...")
+            with tarfile.open(fp, 'r:gz') as tar:
+                members = [m for m in tar.getmembers() if m.isfile() and (m.name.endswith('.csv') or m.name.endswith('.parquet'))]
+                if not members:
+                    raise ValueError(f"No CSV or Parquet files found in {fp}")
+                for member in members:
+                    tar.extract(member, path=fp.parent)
+                    extracted_fp = fp.parent / member.name
+                    # Load the extracted file into a Polars DataFrame
+        if (output_path / "parquet").is_dir():
+            return pl.scan_parquet(output_path / "parquet")
+        if (output_path / "csv").is_dir():
+            return pl.scan_csv(output_path / "csv")
+        # if Path(members[0].name).suffix == '.csv':
+        #     return pl.scan_csv(fp.parent/Path(members[0].name).parent)
+        # elif Path(members[0].name).suffix == '.parquet':
+        #     logger.info(fp.parent/Path(members[0].name).parent)
+        #     return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
     else:
         return pl.scan_csv(fp)
+
+def save_last_event(df: pl.LazyFrame, patient_df: pl.LazyFrame, event_col: str, time_col: str, MEDS_input_dir: Path) -> None:
+    """
+    Returns the last event in a dataframe.
+
+    Args:
+        df: The input dataframe.
+        event_col: The column containing the event.
+        time_col: The column containing the time of the event.
+
+    Returns:
+        The last event in the dataframe.
+    """
+    last_event = df.group_by(SUBJECT_ID).agg(pl.col(time_col).max().alias(time_col), pl.col(event_col).last().alias(event_col))
+    last_event = last_event.join(patient_df, on=SUBJECT_ID, how="inner")
+    last_event = last_event.with_columns(
+        date_of_death=pl.when(pl.col("died_in_hospital")).then(pl.col(time_col)).otherwise(None)
+    )
+    last_event.sink_parquet(MEDS_input_dir / "patient.parquet")
 
 
 def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
@@ -212,11 +246,11 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     unused_tables = {}
     patient_out_fp = MEDS_input_dir / "patient.parquet"
     references_out_fp = MEDS_input_dir / "hirid_variable_reference.parquet"
-    link_out_fp = MEDS_input_dir / ""
+    # link_out_fp = MEDS_input_dir / ""
 
     if patient_out_fp.is_file(): #and link_out_fp.is_file():
         logger.info(f"Reloading processed patient df from {str(patient_out_fp.resolve())}")
-        patient_df = pl.read_parquet(patient_out_fp, use_pyarrow=True)
+        patient_df = pl.scan_parquet(patient_out_fp)
         # link_df = pl.read_parquet(link_out_fp, use_pyarrow=True)
     else:
         logger.info("Processing patient table...")
@@ -235,7 +269,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
 
     if references_out_fp.is_file():
         logger.info(f"Reloading processed references df from {str(references_out_fp.resolve())}")
-        references_df = pl.read_parquet(references_out_fp, use_pyarrow=True).lazy()
+        references_df = pl.scan_parquet(references_out_fp)
     else:
         logger.info("Processing references table first...")
         references_fp = Path(input_dir) / "reference_data" / "hirid_variable_reference.csv"
@@ -265,7 +299,9 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp)
-
+        if pfx == "raw_stage/observation_tables_parquet":
+            df = df.head(10000)
+            save_last_event(df, patient_df, "type", "datetime", MEDS_input_dir)
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
 
