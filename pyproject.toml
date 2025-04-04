@@ -3,11 +3,10 @@ requires = ["setuptools>=64", "setuptools-scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ETL-MEDS"
+name = "HIRID-MEDS"
 dynamic = ["version"]
 authors = [
     {name= "Robin van de Water", email="robin.vandewater@hpi.de"},
-  { name="Matthew McDermott", email="mattmcdermott8@gmail.com" },
 ]
 description = "An ETL pipeline to extract HIRID data into the MEDS format."
 readme = "README.md"
