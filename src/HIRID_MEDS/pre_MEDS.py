@@ -1,7 +1,7 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
+
 import shutil
 import tarfile
-import tempfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -26,8 +26,7 @@ IGNORE_TABLES = []
 
 
 def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
-    """
-    Process the operations table to get the patient table and the link table.
+    """Process the operations table to get the patient table and the link table.
 
     As dataset may store only offset times, note here that we add a CONSTANT TIME ACROSS ALL PATIENTS for the
     true timestamp of their health system admission.
@@ -42,15 +41,14 @@ def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
     pseudo_date_of_birth = admission_time - pl.duration(days=age_in_days)
     # pseudo_date_of_death = admission_time + pl.duration(seconds=pl.col())
     death_bool = pl.col("discharge_status") != "alive"
-    return df.select(#df.sort(by="admissiontime").group_by(SUBJECT_ID).first().select(
-                SUBJECT_ID,
-                pseudo_date_of_birth.alias("date_of_birth"),
-                admission_time.alias("first_admitted_at_time"),
-                "sex",
-                death_bool.alias("died_in_hospital"),
-                # pseudo_date_of_death.alias("date_of_death"),
-            )
-
+    return df.select(  # df.sort(by="admissiontime").group_by(SUBJECT_ID).first().select(
+        SUBJECT_ID,
+        pseudo_date_of_birth.alias("date_of_birth"),
+        admission_time.alias("first_admitted_at_time"),
+        "sex",
+        death_bool.alias("died_in_hospital"),
+        # pseudo_date_of_death.alias("date_of_death"),
+    )
 
 
 def join_and_get_pseudotime_fntr(
@@ -160,24 +158,28 @@ def join_and_get_pseudotime_fntr(
 def load_raw_file(fp: Path) -> pl.LazyFrame:
     """Loads a raw file into a Polars DataFrame."""
     logger.info(f"Loading {str(fp.resolve())}...")
-    if fp.suffixes == ['.tar', '.gz']:
+    if fp.suffixes == [".tar", ".gz"]:
         output_path = fp.with_suffix("").with_suffix("")
-        if '_' in output_path.name:
-            stripped_part = output_path.name.split('_')[-1]
-            output_path = output_path.with_name('_'.join(output_path.name.split('_')[:-1]))
-        else:
-            stripped_part = output_path.name
-        stripped_path = output_path.with_name(stripped_part)
+        if "_" in output_path.name:
+            # stripped_part = output_path.name.split("_")[-1]
+            output_path = output_path.with_name("_".join(output_path.name.split("_")[:-1]))
+        # else:
+        # stripped_part = output_path.name
+        # stripped_path = output_path.with_name(stripped_part)
 
         if not output_path.is_dir():
             logger.info(f"Extracting {fp} to {output_path}...")
-            with tarfile.open(fp, 'r:gz') as tar:
-                members = [m for m in tar.getmembers() if m.isfile() and (m.name.endswith('.csv') or m.name.endswith('.parquet'))]
+            with tarfile.open(fp, "r:gz") as tar:
+                members = [
+                    m
+                    for m in tar.getmembers()
+                    if m.isfile() and (m.name.endswith(".csv") or m.name.endswith(".parquet"))
+                ]
                 if not members:
                     raise ValueError(f"No CSV or Parquet files found in {fp}")
                 for member in members:
                     tar.extract(member, path=fp.parent)
-                    extracted_fp = fp.parent / member.name
+                    # extracted_fp = fp.parent / member.name
                     # Load the extracted file into a Polars DataFrame
         if (output_path / "parquet").is_dir():
             return pl.scan_parquet(output_path / "parquet")
@@ -191,9 +193,11 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     else:
         return pl.scan_csv(fp)
 
-def save_last_event(df: pl.LazyFrame, patient_df: pl.LazyFrame, event_col: str, time_col: str, MEDS_input_dir: Path) -> None:
-    """
-    Returns the last event in a dataframe.
+
+def save_last_event(
+    df: pl.LazyFrame, patient_df: pl.LazyFrame, event_col: str, time_col: str, MEDS_input_dir: Path
+) -> None:
+    """Returns the last event in a dataframe.
 
     Args:
         df: The input dataframe.
@@ -203,7 +207,9 @@ def save_last_event(df: pl.LazyFrame, patient_df: pl.LazyFrame, event_col: str, 
     Returns:
         The last event in the dataframe.
     """
-    last_event = df.group_by(SUBJECT_ID).agg(pl.col(time_col).max().alias(time_col), pl.col(event_col).last().alias(event_col))
+    last_event = df.group_by(SUBJECT_ID).agg(
+        pl.col(time_col).max().alias(time_col), pl.col(event_col).last().alias(event_col)
+    )
     last_event = last_event.join(patient_df, on=SUBJECT_ID, how="inner")
     last_event = last_event.with_columns(
         date_of_death=pl.when(pl.col("died_in_hospital")).then(pl.col(time_col)).otherwise(None)
@@ -224,7 +230,6 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         logger.warning("do_overwrite is set to True. This will overwrite any existing data.")
         shutil.rmtree(MEDS_input_dir)
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
-
 
     done_fp = MEDS_input_dir / ".done"
     if done_fp.is_file() and not cfg.do_overwrite:
@@ -248,16 +253,16 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     references_out_fp = MEDS_input_dir / "hirid_variable_reference.parquet"
     # link_out_fp = MEDS_input_dir / ""
 
-    if patient_out_fp.is_file(): #and link_out_fp.is_file():
+    if patient_out_fp.is_file():  # and link_out_fp.is_file():
         logger.info(f"Reloading processed patient df from {str(patient_out_fp.resolve())}")
         patient_df = pl.scan_parquet(patient_out_fp)
         # link_df = pl.read_parquet(link_out_fp, use_pyarrow=True)
     else:
         logger.info("Processing patient table...")
         if not (Path(input_dir) / "reference_data").is_dir():
-            with tarfile.open(str(Path(input_dir) / "reference_data.tar.gz"), 'r:gz') as tar:
+            with tarfile.open(str(Path(input_dir) / "reference_data.tar.gz"), "r:gz") as tar:
                 tar.extractall(path=str(Path(input_dir) / "reference_data"))
-        admissions_fp = Path(input_dir) / "reference_data"/ "general_table.csv"
+        admissions_fp = Path(input_dir) / "reference_data" / "general_table.csv"
         logger.info(f"Loading {str(admissions_fp.resolve())}...")
         raw_admissions_df = load_raw_file(admissions_fp)
         patient_df = get_patient_link(raw_admissions_df)
