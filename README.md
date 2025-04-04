@@ -18,7 +18,12 @@ pip install HIRID_MEDS # you can do this locally or via PyPI
 MEDS_extract-HIRID root_output_dir=$ROOT_OUTPUT_DIR do_download=true raw_input_dir=$RAW_INPUT_DIR
 ```
 
+## Citation
 
+If you use this dataset, please cite the original publication below and the ETL (see cite this repository):
 
+```
+Faltys, M., Zimmermann, M., Lyu, X., Hüser, M., Hyland, S., Rätsch, G., & Merz, T. (2021). HiRID, a high time-resolution ICU dataset (version 1.1.1). PhysioNet. https://doi.org/10.13026/nkwc-js72.
 
-
+Hyland, S.L., Faltys, M., Hüser, M. et al. Early prediction of circulatory failure in the intensive care unit using machine learning. Nat Med 26, 364–373 (2020). https://doi.org/10.1038/s41591-020-0789-4
+```

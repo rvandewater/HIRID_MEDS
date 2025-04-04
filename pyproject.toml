@@ -9,7 +9,7 @@ authors = [
     {name= "Robin van de Water", email="robin.vandewater@hpi.de"},
   { name="Matthew McDermott", email="mattmcdermott8@gmail.com" },
 ]
-description = "A template ETL pipeline to extract HIRID data into the MEDS format."
+description = "An ETL pipeline to extract HIRID data into the MEDS format."
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "meds-transforms>=0.1", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars"
+  "meds-transforms~=0.2", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars"
 ]
 
 [tool.setuptools_scm]
