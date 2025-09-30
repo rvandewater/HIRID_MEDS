@@ -12,6 +12,8 @@ table_processors:
     # Column that contains ID's to concepts
     reference_col: []
     # Output data columns
+    output_data_cols:
+      ["first_admitted_at_time", "date_of_birth", "sex", "died_in_hospital"]
   raw_stage/pharma_records_parquet:
     # Column that contains the offset
     offset_col: []
@@ -37,7 +39,7 @@ table_processors:
         "Variable Name",
         "Unit",
       ]
-  raw_stage/observation_tables_parquet:
+  raw_stage/observation_tables:
     # Column that contains the offset
     offset_col: []
     # Output column that contains the pseudotime computed from offset

@@ -182,7 +182,7 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
                     # extracted_fp = fp.parent / member.name
                     # Load the extracted file into a Polars DataFrame
         if (output_path / "parquet").is_dir():
-            return pl.scan_parquet(output_path / "parquet")
+            return pl.scan_parquet(output_path / "parquet" / "*.parquet")
         if (output_path / "csv").is_dir():
             return pl.scan_csv(output_path / "csv")
         # if Path(members[0].name).suffix == '.csv':
@@ -190,8 +190,10 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
         # elif Path(members[0].name).suffix == '.parquet':
         #     logger.info(fp.parent/Path(members[0].name).parent)
         #     return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
-    else:
-        return pl.scan_csv(fp)
+    elif (fp / "parquet").is_dir():
+        return pl.scan_parquet(fp / "parquet/*.parquet")
+
+    return pl.scan_csv(fp)
 
 
 def save_last_event(
@@ -214,6 +216,7 @@ def save_last_event(
     last_event = last_event.with_columns(
         date_of_death=pl.when(pl.col("died_in_hospital")).then(pl.col(time_col)).otherwise(None)
     )
+    # return last_event.collect()
     last_event.sink_parquet(MEDS_input_dir / "patient.parquet")
 
 
@@ -243,11 +246,19 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     for ext in DATA_FILE_EXTENSIONS:
         all_fps.extend(input_dir.rglob(f"*/{ext}"))
         all_fps.extend(input_dir.rglob(f"{ext}"))
+        # If you want only folders:
+        all_folders = [p for p in input_dir.rglob("*") if p.is_dir()]
+        all_fps.extend(all_folders)
+    #     all_fps.extend(input_dir.rglob("*"))
 
     for table_name, preprocessor_cfg in preprocessors.items():
         logger.info(f"  Adding preprocessor for {table_name}:\n{OmegaConf.to_yaml(preprocessor_cfg)}")
         functions[table_name] = join_and_get_pseudotime_fntr(table_name=table_name, **preprocessor_cfg)
 
+    # exts = ["parquet"]
+    # for item in preprocessors.items():
+    #     table_name = item[0]
+    #     all_fps.extend(input_dir.rglob(f"{table_name}/parquet"))
     unused_tables = {}
     patient_out_fp = MEDS_input_dir / "patient.parquet"
     references_out_fp = MEDS_input_dir / "hirid_variable_reference.parquet"
@@ -283,9 +294,12 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         write_lazyframe(references_df, references_out_fp)
 
     # patient_df = patient_df.join(link_df, on=SUBJECT_ID)
-
+    # all_fps.append("")
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
+        logger.info(pfx)
+        if pfx == "raw_stage/observation_tables":
+            logger.info(f"Processing raw data from {str(in_fp.resolve())}")
         if pfx in unused_tables:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
@@ -304,7 +318,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp)
-        if pfx == "raw_stage/observation_tables_parquet":
+        if pfx == "raw_stage/observation_tables":
             save_last_event(df, patient_df, "type", "datetime", MEDS_input_dir)
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
@@ -314,6 +328,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             f"patient_df schema: {patient_df.collect_schema()}, "
             f"processed_df schema: {processed_df.collect_schema()}"
         )
+
         processed_df.sink_parquet(out_fp)
         logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 

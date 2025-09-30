@@ -29,7 +29,7 @@ raw_stage/pharma_records_parquet:
     numeric_value: col(givendose)
     text_value: col(Unit)
 
-raw_stage/observation_tables_parquet:
+raw_stage/observation_tables:
   observation:
     code:
       - OBSERVATION
