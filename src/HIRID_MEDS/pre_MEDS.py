@@ -209,8 +209,9 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
         #     return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
     elif (fp / "parquet").is_dir():
         return pl.scan_parquet(fp / "parquet/*.parquet")
-
-    return pl.scan_csv(fp)
+    elif (fp / "csv").is_dir():
+        return pl.scan_csv(fp / "csv")
+    return None
 
 
 def save_last_event(
@@ -356,6 +357,9 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp)
+        if df is None:
+            logger.warning(f"Could not load {str(in_fp.resolve())}. Skipping.")
+            continue
         if pfx == "raw_stage/observation_tables":
             save_last_event(df, patient_df, "type", "datetime", MEDS_input_dir)
         fn = functions[pfx]
