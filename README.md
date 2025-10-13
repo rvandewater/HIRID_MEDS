@@ -7,6 +7,9 @@
 [![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/mmcdermott/ETL_MEDS_Template#license)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/ETL_MEDS_Template/pulls)
 [![contributors](https://img.shields.io/github/contributors/mmcdermott/ETL_MEDS_Template.svg)](https://github.com/mmcdermott/ETL_MEDS_Template/graphs/contributors)
+![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
+
+Warning: This ETL currently needs a lot of resources to run.
 
 A template repository for a MEDS-Transforms powered extraction pipeline for a custom dataset. Once you have
 customized the repository to your dataset (see instructions below), you will be able to run your extraction
