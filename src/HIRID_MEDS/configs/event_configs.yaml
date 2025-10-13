@@ -12,6 +12,7 @@ patient:
   birth:
     code: MEDS_BIRTH
     time: col(date_of_birth)
+patient_last_event:
   death:
     code: MEDS_DEATH
     time: col(date_of_death)

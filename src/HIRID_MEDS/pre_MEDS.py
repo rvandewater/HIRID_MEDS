@@ -313,7 +313,7 @@ def save_last_event(
         ),
     )
     # return last_event.collect()
-    last_event.sink_parquet(MEDS_input_dir / "patient.parquet")
+    last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
 
 
 def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
