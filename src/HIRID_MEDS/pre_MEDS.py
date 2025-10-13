@@ -170,21 +170,29 @@ def join_and_get_pseudotime_fntr(
 
 
 def load_raw_file(fp: Path) -> pl.LazyFrame:
-    """Loads a raw file into a Polars DataFrame."""
+    """Loads a raw file into a Polars LazyFrame.
+
+    Supports:
+    - direct CSV files (including .gz compressed)
+    - direct Parquet files
+    - directories containing `csv` or `parquet` subfolders
+    - tar.gz archives containing CSV or Parquet files
+    """
     logger.info(f"Loading {str(fp.resolve())}...")
+    fp = Path(fp)
+
+    if not fp.exists():
+        raise FileNotFoundError(f"`{fp}` does not exist")
+
+    # tar.gz archive containing csv/parquet
     if fp.suffixes == [".tar", ".gz"]:
         output_path = fp.with_suffix("").with_suffix("")
         if "_" in output_path.name:
-            # stripped_part = output_path.name.split("_")[-1]
             output_path = output_path.with_name(
                 "_".join(output_path.name.split("_")[:-1])
             )
-        # else:
-        # stripped_part = output_path.name
-        # stripped_path = output_path.with_name(stripped_part)
-
         if not output_path.is_dir():
-            logger.info(f"Extracting {fp} to {output_path}...")
+            logger.info(f"Extracting `{fp}` to `{output_path}`...")
             with tarfile.open(fp, "r:gz") as tar:
                 members = [
                     m
@@ -193,25 +201,81 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
                     and (m.name.endswith(".csv") or m.name.endswith(".parquet"))
                 ]
                 if not members:
-                    raise ValueError(f"No CSV or Parquet files found in {fp}")
+                    raise ValueError(f"No CSV or Parquet files found in `{fp}`")
                 for member in members:
                     tar.extract(member, path=fp.parent)
-                    # extracted_fp = fp.parent / member.name
-                    # Load the extracted file into a Polars DataFrame
         if (output_path / "parquet").is_dir():
-            return pl.scan_parquet(output_path / "parquet" / "*.parquet")
+            return pl.scan_parquet(str(output_path / "parquet" / "*.parquet"))
         if (output_path / "csv").is_dir():
-            return pl.scan_csv(output_path / "csv")
-        # if Path(members[0].name).suffix == '.csv':
-        #     return pl.scan_csv(fp.parent/Path(members[0].name).parent)
-        # elif Path(members[0].name).suffix == '.parquet':
-        #     logger.info(fp.parent/Path(members[0].name).parent)
-        #     return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
-    elif (fp / "parquet").is_dir():
-        return pl.scan_parquet(fp / "parquet/*.parquet")
-    elif (fp / "csv").is_dir():
-        return pl.scan_csv(fp / "csv")
-    return None
+            return pl.scan_csv(str(output_path / "csv" / "*.csv"))
+
+    # directory with parquet/csv subfolders
+    if fp.is_dir():
+        if (fp / "parquet").is_dir():
+            return pl.scan_parquet(str(fp / "parquet" / "*.parquet"))
+        if (fp / "csv").is_dir():
+            return pl.scan_csv(str(fp / "csv" / "*.csv"))
+
+    # direct parquet file
+    if fp.suffix == ".parquet" or (len(fp.suffixes) > 0 and ".parquet" in fp.suffixes):
+        return pl.scan_parquet(str(fp))
+
+    # direct csv file (including .csv.gz)
+    if fp.suffix == ".csv" or (len(fp.suffixes) > 0 and ".csv" in fp.suffixes):
+        return pl.scan_csv(str(fp))
+
+    # fallback: try glob patterns inside path (helps when caller passes a folder-like path)
+    if (fp / "parquet").exists():
+        return pl.scan_parquet(str(fp / "parquet" / "*.parquet"))
+    if (fp / "csv").exists():
+        return pl.scan_csv(str(fp / "csv" / "*.csv"))
+
+    raise ValueError(f"Could not load `{fp}`: unsupported file/directory structure")
+
+
+# def load_raw_file(fp: Path) -> pl.LazyFrame:
+#     """Loads a raw file into a Polars DataFrame."""
+#     logger.info(f"Loading {str(fp.resolve())}...")
+#     if fp.suffixes == [".tar", ".gz"]:
+#         output_path = fp.with_suffix("").with_suffix("")
+#         if "_" in output_path.name:
+#             # stripped_part = output_path.name.split("_")[-1]
+#             output_path = output_path.with_name(
+#                 "_".join(output_path.name.split("_")[:-1])
+#             )
+#         # else:
+#         # stripped_part = output_path.name
+#         # stripped_path = output_path.with_name(stripped_part)
+#
+#         if not output_path.is_dir():
+#             logger.info(f"Extracting {fp} to {output_path}...")
+#             with tarfile.open(fp, "r:gz") as tar:
+#                 members = [
+#                     m
+#                     for m in tar.getmembers()
+#                     if m.isfile()
+#                     and (m.name.endswith(".csv") or m.name.endswith(".parquet"))
+#                 ]
+#                 if not members:
+#                     raise ValueError(f"No CSV or Parquet files found in {fp}")
+#                 for member in members:
+#                     tar.extract(member, path=fp.parent)
+#                     # extracted_fp = fp.parent / member.name
+#                     # Load the extracted file into a Polars DataFrame
+#         if (output_path / "parquet").is_dir():
+#             return pl.scan_parquet(output_path / "parquet" / "*.parquet")
+#         if (output_path / "csv").is_dir():
+#             return pl.scan_csv(output_path / "csv")
+#         # if Path(members[0].name).suffix == '.csv':
+#         #     return pl.scan_csv(fp.parent/Path(members[0].name).parent)
+#         # elif Path(members[0].name).suffix == '.parquet':
+#         #     logger.info(fp.parent/Path(members[0].name).parent)
+#         #     return pl.scan_parquet(fp.parent/Path(members[0].name).parent)
+#     elif (fp / "parquet").is_dir():
+#         return pl.scan_parquet(fp / "parquet/*.parquet")
+#     elif (fp / "csv").is_dir():
+#         return pl.scan_csv(fp / "csv")
+#     return None
 
 
 def save_last_event(
