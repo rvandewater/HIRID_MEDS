@@ -25,7 +25,7 @@ DATA_FILE_EXTENSIONS = premeds_cfg.raw_data_extensions
 IGNORE_TABLES = []
 
 
-def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
+def get_patient_link(df: pl.LazyFrame, limit: int) -> (pl.LazyFrame, pl.LazyFrame):
     """Process the operations table to get the patient table and the link table.
 
     As dataset may store only offset times, note here that we add a CONSTANT TIME ACROSS ALL PATIENTS for the
@@ -35,6 +35,8 @@ def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
     `configs/event_configs.yaml` file.
     """
     # logger.info(f"head: {df.head().collect()}")
+    if limit > 0:
+        df = df.limit(limit)
     admission_time = pl.col("admissiontime").str.strptime(pl.Datetime, strict=True)
     age_in_years = pl.col("age").cast(pl.Float64)
     age_seconds = (age_in_years * 365.25 * 24 * 3600).round().cast(pl.Int64)
@@ -339,7 +341,9 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             f"do_overwrite={cfg.do_overwrite}. Returning."
         )
         exit(0)
-
+    limit = cfg.get("limit_subjects", 0)
+    if limit > 0:
+        logger.info(f"Limiting to {limit} subjects for debugging purposes.")
     all_fps = []
     for ext in DATA_FILE_EXTENSIONS:
         all_fps.extend(input_dir.rglob(f"*/{ext}"))
@@ -382,7 +386,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
         admissions_fp = Path(input_dir) / "reference_data" / "general_table.csv"
         logger.info(f"Loading {str(admissions_fp.resolve())}...")
         raw_admissions_df = load_raw_file(admissions_fp)
-        patient_df = get_patient_link(raw_admissions_df)
+        patient_df = get_patient_link(raw_admissions_df, limit=limit)
         # logger.info(patient_df.head(10).collect())
         write_lazyframe(patient_df, patient_out_fp)
         # patient_df, link_df = #get_patient_link(raw_admissions_df)
