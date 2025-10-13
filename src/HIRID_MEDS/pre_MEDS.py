@@ -34,7 +34,7 @@ def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
     The output of this process is ultimately converted to events via the `patient` key in the
     `configs/event_configs.yaml` file.
     """
-    logger.info(f"head: {df.head().collect()}")
+    # logger.info(f"head: {df.head().collect()}")
     admission_time = pl.col("admissiontime").str.strptime(pl.Datetime, strict=True)
     age_in_years = pl.col("age").cast(pl.Float64)
     age_seconds = (age_in_years * 365.25 * 24 * 3600).round().cast(pl.Int64)
@@ -299,15 +299,18 @@ def save_last_event(
         pl.col(event_col).last().alias(event_col),
     )
     last_event = last_event.join(patient_df, on=SUBJECT_ID, how="inner")
+    DT_TYPE = pl.Datetime("ns")  # e.g. "ms" or ("ms", "UTC")
     last_event = last_event.with_columns(
-        date_of_death=pl.when(pl.col("died_in_hospital"))
-        .then(pl.col(time_col))
-        .otherwise(None)
-    )
-    last_event = last_event.with_columns(
-        date_of_discharge=pl.when(~pl.col("died_in_hospital"))
-        .then(pl.col(time_col))
-        .otherwise(None)
+        date_of_death=(
+            pl.when(pl.col("died_in_hospital"))
+            .then(pl.col(time_col).cast(DT_TYPE))
+            .otherwise(pl.lit(None).cast(DT_TYPE))
+        ),
+        date_of_discharge=(
+            pl.when(~pl.col("died_in_hospital"))
+            .then(pl.col(time_col).cast(DT_TYPE))
+            .otherwise(pl.lit(None).cast(DT_TYPE))
+        ),
     )
     # return last_event.collect()
     last_event.sink_parquet(MEDS_input_dir / "patient.parquet")
