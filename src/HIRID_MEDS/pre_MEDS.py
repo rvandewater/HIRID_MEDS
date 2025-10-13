@@ -304,6 +304,11 @@ def save_last_event(
         .then(pl.col(time_col))
         .otherwise(None)
     )
+    last_event = last_event.with_columns(
+        date_of_discharge=pl.when(~pl.col("died_in_hospital"))
+        .then(pl.col(time_col))
+        .otherwise(None)
+    )
     # return last_event.collect()
     last_event.sink_parquet(MEDS_input_dir / "patient.parquet")
 
@@ -442,4 +447,5 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     logger.info(
         f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
     )
+    patient_df
     return

@@ -18,7 +18,10 @@ patient:
     code: MEDS_DEATH
     time: col(date_of_death)
     time_format: "%Y-%m-%d %H:%M:%S"
-
+  discharge:
+    code: HOSPITAL_DISCHARGE
+    time: col(date_of_discharge)
+    time_format: "%Y-%m-%d %H:%M:%S"
 raw_stage/pharma_records_parquet:
   medication:
     code:
