@@ -4,7 +4,6 @@ patient:
   admission:
     code: HOSPITAL_ADMISSION
     time: col(first_admitted_at_time)
-    time_format: "%Y-%m-%d %H:%M:%S"
   sex:
     code:
       - SEX
@@ -13,15 +12,12 @@ patient:
   birth:
     code: MEDS_BIRTH
     time: col(date_of_birth)
-    time_format: "%Y-%m-%d"
   death:
     code: MEDS_DEATH
     time: col(date_of_death)
-    time_format: "%Y-%m-%d %H:%M:%S"
   discharge:
     code: HOSPITAL_DISCHARGE
     time: col(date_of_discharge)
-    time_format: "%Y-%m-%d %H:%M:%S"
 raw_stage/pharma_records_parquet:
   medication:
     code:
