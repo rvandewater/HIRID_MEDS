@@ -34,9 +34,8 @@ def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
     The output of this process is ultimately converted to events via the `patient` key in the
     `configs/event_configs.yaml` file.
     """
-    admission_time = pl.col("admissiontime").str.strptime(
-        pl.Datetime, format="%Y-%m-%d %H:%M:%S", strict=False
-    )
+    logger.info(f"head: {df.head().collect()}")
+    admission_time = pl.col("admissiontime").str.strptime(pl.Datetime, strict=True)
     age_in_years = pl.col("age").cast(pl.Float64)
     age_seconds = (age_in_years * 365.25 * 24 * 3600).round().cast(pl.Int64)
     # admission_time = pl.col("admissiontime").str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S", strict=False)
