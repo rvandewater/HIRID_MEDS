@@ -467,7 +467,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             logger.info(last_event_collected.select("patientid").n_unique())
             logger.info(last_event_collected.describe())
             logger.info(last_event_collected.head())
-            last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
+            last_event.sink_parquet(MEDS_input_dir / "patient.parquet")
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
         # table_name = cfg.get(functions[pfx])
