@@ -13,9 +13,9 @@ patient:
     code: MEDS_BIRTH
     time: col(date_of_birth)
 patient_last_event:
-  death:
-    code: MEDS_DEATH
-    time: col(date_of_death)
+  #  death:
+  #    code: MEDS_DEATH
+  #    time: col(date_of_death)
   discharge:
     code: HOSPITAL_DISCHARGE
     time: col(date_of_discharge)
