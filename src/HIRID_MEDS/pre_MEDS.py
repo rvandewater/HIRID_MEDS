@@ -464,7 +464,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             )
             last_event_collected = last_event.collect()
             logger.info(last_event_collected.select("patientid").n_unique())
-            logger.info(last_event_collected.select("patientid").head())
+            logger.info(last_event_collected.describe())
             last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
