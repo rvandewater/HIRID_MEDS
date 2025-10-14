@@ -305,12 +305,12 @@ def save_last_event(
     DT_TYPE = pl.Datetime("ns")  # e.g. "ms" or ("ms", "UTC")
     last_event = last_event.with_columns(
         date_of_death=(
-            pl.when(pl.col("died_in_hospital"))
+            pl.when(pl.col("died_in_hospital").is_not_null())
             .then(pl.col(time_col).cast(DT_TYPE))
             .otherwise(pl.lit(None).cast(DT_TYPE))
         ),
         date_of_discharge=(
-            pl.when(~pl.col("died_in_hospital"))
+            pl.when(~pl.col("died_in_hospital").is_not_null())
             .then(pl.col(time_col).cast(DT_TYPE))
             .otherwise(pl.lit(None).cast(DT_TYPE))
         ),
@@ -465,6 +465,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             last_event_collected = last_event.collect()
             logger.info(last_event_collected.select("patientid").n_unique())
             logger.info(last_event_collected.describe())
+            logger.info(last_event.head())
             last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
