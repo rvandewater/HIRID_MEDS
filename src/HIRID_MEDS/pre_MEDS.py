@@ -25,7 +25,7 @@ DATA_FILE_EXTENSIONS = premeds_cfg.raw_data_extensions
 IGNORE_TABLES = []
 
 
-def get_patient_link(df: pl.LazyFrame, limit: int) -> (pl.LazyFrame, pl.LazyFrame):
+def get_patient_link(df: pl.LazyFrame, limit: int = 0) -> (pl.LazyFrame, pl.LazyFrame):
     """Process the operations table to get the patient table and the link table.
 
     As dataset may store only offset times, note here that we add a CONSTANT TIME ACROSS ALL PATIENTS for the
@@ -99,7 +99,7 @@ def join_and_get_pseudotime_fntr(
         ... )
         >>> df = load_raw_file(Path("tests/operations_synthetic.csv"))
         >>> raw_admissions_df = load_raw_file(Path("tests/operations_synthetic.csv"))
-        >>> patient_df, link_df = get_patient_link(raw_admissions_df)
+        >>> patient_df = get_patient_link(raw_admissions_df)
         >>> references_df = load_raw_file(Path("tests/d_references.csv"))
         >>> processed_df = func(df, patient_df, references_df)
         >>> type(processed_df)
@@ -165,6 +165,7 @@ def join_and_get_pseudotime_fntr(
         joined = df.join(patient_df.lazy(), on=SUBJECT_ID, how="inner")
         if len(reference_col) > 0:
             joined = joined.join(references_df, left_on=reference_col, right_on="ID")
+
         return joined.select(SUBJECT_ID, *pseudotimes, *output_data_cols)
 
     return fn
@@ -284,7 +285,7 @@ def save_last_event(
     patient_df: pl.LazyFrame,
     event_col: str,
     time_col: str,
-    MEDS_input_dir: Path,
+    last_event: pl.LazyFrame,
 ) -> None:
     """Returns the last event in a dataframe.
 
@@ -314,8 +315,24 @@ def save_last_event(
             .otherwise(pl.lit(None).cast(DT_TYPE))
         ),
     )
+    # if last_event is None:
+    #     last_event = df.group_by(SUBJECT_ID).agg(
+    #         pl.col(time_col).max().alias(time_col),
+    #         pl.col(event_col).last().alias(event_col),
+    #     )
+    #     last_event = last_event.join(patient_df, on=SUBJECT_ID, how="inner")
+    # else:
+    #     new_last_event = df.group_by(SUBJECT_ID).agg(
+    #             pl.col(time_col).max().alias(time_col),
+    #             pl.col(event_col).last().alias(event_col),
+    #         )
+    #     last_event = pl.concat([last_event, new_last_event]).group_by(SUBJECT_ID).agg(
+    #         pl.col(time_col).max().alias(time_col),
+    #         pl.col(event_col).last().alias(event_col),
+    #     )
+    return last_event
     # return last_event.collect()
-    last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
+    # last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
 
 
 def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
@@ -409,6 +426,13 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
 
     # patient_df = patient_df.join(link_df, on=SUBJECT_ID)
     # all_fps.append("")
+    # patient_df_collected = patient_df.collect()
+    last_events = (
+        patient_df.select(["patientid", "first_admitted_at_time"]).collect().to_dict()
+    )
+    last_events = dict(
+        zip(last_events["patientid"], last_events["first_admitted_at_time"])
+    )
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
         logger.info(pfx)
@@ -439,7 +463,7 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             save_last_event(df, patient_df, "type", "datetime", MEDS_input_dir)
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
-
+        # table_name = cfg.get(functions[pfx])
         # Sink throws errors, so we use collect instead
         logger.info(
             f"patient_df schema: {patient_df.collect_schema()}, "
@@ -454,5 +478,5 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     logger.info(
         f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
     )
-    patient_df
+
     return
