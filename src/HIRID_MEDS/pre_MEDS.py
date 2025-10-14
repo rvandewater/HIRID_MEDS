@@ -332,7 +332,6 @@ def save_last_event(
     #     )
     return last_event
     # return last_event.collect()
-    # last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
 
 
 def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
@@ -460,7 +459,10 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
             logger.warning(f"Could not load {str(in_fp.resolve())}. Skipping.")
             continue
         if pfx == "raw_stage/observation_tables":
-            save_last_event(df, patient_df, "type", "datetime", MEDS_input_dir)
+            last_event = save_last_event(
+                df, patient_df, "type", "datetime", MEDS_input_dir
+            )
+            last_event.sink_parquet(MEDS_input_dir / "patient_last_event.parquet")
         fn = functions[pfx]
         processed_df = fn(df, patient_df, references_df)
         # table_name = cfg.get(functions[pfx])
