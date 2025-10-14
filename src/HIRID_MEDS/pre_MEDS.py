@@ -307,14 +307,14 @@ def save_last_event(
         date_of_death=(
             pl.when(pl.col("died_in_hospital"))
             .then(pl.col(time_col).cast(DT_TYPE))
-            .otherwise(pl.lit(None).str.strptime(pl.Datetime, strict=True))
+            .otherwise(pl.lit(None).cast(DT_TYPE))
         ),
         # date_of_discharge=(
         #     pl.when(~pl.col("died_in_hospital") | pl.col("died_in_hospital").is_null())
         #     .then(pl.col(time_col).cast(DT_TYPE))
         #     .otherwise(pl.lit(None).cast(DT_TYPE))
         # ),
-        date_of_discharge=pl.col(time_col).str.strptime(pl.Datetime, strict=True),
+        date_of_discharge=pl.col(time_col).cast(DT_TYPE),
     )
     # if last_event is None:
     #     last_event = df.group_by(SUBJECT_ID).agg(
