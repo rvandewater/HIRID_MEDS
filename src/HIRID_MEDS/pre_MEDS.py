@@ -302,19 +302,19 @@ def save_last_event(
         pl.col(event_col).last().alias(event_col),
     )
     last_event = last_event.join(patient_df, on=SUBJECT_ID, how="inner")
-    DT_TYPE = pl.Datetime("ns")  # e.g. "ms" or ("ms", "UTC")
+    DT_TYPE = pl.Datetime("ms")  # e.g. "ms" or ("ms", "UTC")
     last_event = last_event.with_columns(
         date_of_death=(
             pl.when(pl.col("died_in_hospital"))
             .then(pl.col(time_col).cast(DT_TYPE))
-            .otherwise(pl.lit(None).cast(DT_TYPE))
+            .otherwise(pl.lit(None).str.strptime(pl.Datetime, strict=True))
         ),
         # date_of_discharge=(
         #     pl.when(~pl.col("died_in_hospital") | pl.col("died_in_hospital").is_null())
         #     .then(pl.col(time_col).cast(DT_TYPE))
         #     .otherwise(pl.lit(None).cast(DT_TYPE))
         # ),
-        date_of_discharge=pl.col(time_col).cast(DT_TYPE),
+        date_of_discharge=pl.col(time_col).str.strptime(pl.Datetime, strict=True),
     )
     # if last_event is None:
     #     last_event = df.group_by(SUBJECT_ID).agg(
