@@ -309,11 +309,12 @@ def save_last_event(
             .then(pl.col(time_col).cast(DT_TYPE))
             .otherwise(pl.lit(None).cast(DT_TYPE))
         ),
-        date_of_discharge=(
-            pl.when(~pl.col("died_in_hospital") | pl.col("died_in_hospital").is_null())
-            .then(pl.col(time_col).cast(DT_TYPE))
-            .otherwise(pl.lit(None).cast(DT_TYPE))
-        ),
+        # date_of_discharge=(
+        #     pl.when(~pl.col("died_in_hospital") | pl.col("died_in_hospital").is_null())
+        #     .then(pl.col(time_col).cast(DT_TYPE))
+        #     .otherwise(pl.lit(None).cast(DT_TYPE))
+        # ),
+        date_of_discharge=pl.col(time_col).cast(DT_TYPE),
     )
     # if last_event is None:
     #     last_event = df.group_by(SUBJECT_ID).agg(
