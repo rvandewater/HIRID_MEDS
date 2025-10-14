@@ -427,12 +427,12 @@ def main(cfg: DictConfig, input_dir, output_dir, do_overwrite) -> None:
     # patient_df = patient_df.join(link_df, on=SUBJECT_ID)
     # all_fps.append("")
     # patient_df_collected = patient_df.collect()
-    last_events = (
-        patient_df.select(["patientid", "first_admitted_at_time"]).collect().to_dict()
-    )
-    last_events = dict(
-        zip(last_events["patientid"], last_events["first_admitted_at_time"])
-    )
+    # last_events = (
+    #     patient_df.select(["patientid", "first_admitted_at_time"]).collect().to_dict()
+    # )
+    # last_events = dict(
+    #     zip(last_events["patientid"], last_events["first_admitted_at_time"])
+    # )
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
         logger.info(pfx)
