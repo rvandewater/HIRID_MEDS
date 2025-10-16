@@ -11,9 +11,8 @@
 
 Warning: This ETL currently needs a lot of resources to run.
 
-A template repository for a MEDS-Transforms powered extraction pipeline for a custom dataset. Once you have
-customized the repository to your dataset (see instructions below), you will be able to run your extraction
-pipeline with a few simple command-line commands, such as:
+This repository contains the ETL (Extract, Transform, Load) code to convert the HIRID dataset
+into the [MEDS](https://medical-event-data-standard.github.io/) ecosystem.
 
 ```bash
 pip install HIRID_MEDS # you can do this locally or via PyPI

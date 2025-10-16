@@ -18,6 +18,7 @@ patient:
   discharge:
     code: HOSPITAL_DISCHARGE
     time: col(date_of_discharge)
+
 raw_stage/pharma_records_parquet:
   medication:
     code:
