@@ -43,3 +43,8 @@ HIRID = "HIRID_MEDS.configs:messy.yaml"
 [project.urls]
 Homepage = "https://github.com/mmcdermott/ETL_MEDS_Template"
 Issues = "https://github.com/mmcdermott/ETL_MEDS_Template/issues"
+
+[tool.pytest.ini_options]
+# `--doctest-modules` is scoped to the modules CI passes on the command line. The doctests in
+# `utils.py` / `unpack.py` are the API-level tests for those helpers.
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]

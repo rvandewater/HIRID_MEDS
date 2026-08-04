@@ -37,6 +37,13 @@ jobs:
         run: |
           pytest src/ tests/ -v --cov=src --junitxml=junit.xml -s
 
+      # Doctests for the helper modules. Scoped to these files rather than all of `src/`:
+      # `pre_MEDS.py` carries some long-broken doctests that predate this workflow ever passing
+      # `--doctest-modules`, and fixing those is out of scope here.
+      - name: Run doctests
+        run: |
+          pytest --doctest-modules src/HIRID_MEDS/utils.py -v
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4.0.1
         with:

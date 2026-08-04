@@ -8,7 +8,7 @@ from pathlib import Path
 
 import polars as pl
 from loguru import logger
-from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
+from HIRID_MEDS.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig, OmegaConf
 
 from HIRID_MEDS import dataset_info, premeds_cfg
