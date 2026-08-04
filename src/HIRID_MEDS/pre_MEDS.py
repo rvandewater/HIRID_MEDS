@@ -1,5 +1,6 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
+import re
 import shutil
 import tarfile
 from collections.abc import Callable
@@ -23,6 +24,39 @@ SUBJECT_ID = premeds_cfg.subject_id
 DATA_FILE_EXTENSIONS = premeds_cfg.raw_data_extensions
 # List of tables to be ignored during processing
 IGNORE_TABLES = []
+
+
+def dftly_safe_name(col: str) -> str:
+    """Normalize a raw column name into one a dftly expression can reference.
+
+    The HiRID reference table names its columns ``Variable Name`` and ``Unit``, and dftly has no
+    syntax for referencing a column whose name contains a space — ``$Variable Name`` fails to lex
+    (see https://github.com/mmcdermott/dftly/issues/96). Until that lands, the pre-MEDS step
+    normalizes such names so the MESSY config can read them as ``$variable_name`` / ``$unit``.
+
+    Args:
+        col: The raw column name.
+
+    Returns:
+        The column name lowercased, with every run of non-alphanumeric characters collapsed to a
+        single underscore, and any leading digit prefixed with an underscore.
+
+    Examples:
+        >>> dftly_safe_name("Variable Name")
+        'variable_name'
+        >>> dftly_safe_name("Unit")
+        'unit'
+        >>> dftly_safe_name("already_safe")
+        'already_safe'
+        >>> dftly_safe_name("Value (mg/dL)")
+        'value_mg_dl'
+        >>> dftly_safe_name("2nd reading")
+        '_2nd_reading'
+    """
+    safe = re.sub(r"[^0-9a-zA-Z]+", "_", col).strip("_").lower()
+    if safe and safe[0].isdigit():
+        safe = f"_{safe}"
+    return safe
 
 
 def get_patient_link(df: pl.LazyFrame, limit: int = 0) -> (pl.LazyFrame, pl.LazyFrame):
@@ -166,7 +200,14 @@ def join_and_get_pseudotime_fntr(
         if len(reference_col) > 0:
             joined = joined.join(references_df, left_on=reference_col, right_on="ID")
 
-        return joined.select(SUBJECT_ID, *pseudotimes, *output_data_cols)
+        selected = joined.select(SUBJECT_ID, *pseudotimes, *output_data_cols)
+        return selected.rename(
+            {
+                c: dftly_safe_name(c)
+                for c in selected.collect_schema().names()
+                if c != dftly_safe_name(c)
+            }
+        )
 
     return fn
 

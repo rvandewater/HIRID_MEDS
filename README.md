@@ -24,9 +24,39 @@ source: https://hirid.intensivecare.ai/
 
 ```bash
 pip install HIRID_MEDS # you can do this locally or via PyPI
-# Download your data or set download credentials
+
+# PhysioNet credentials for the download leg:
+export DATASET_DOWNLOAD_USERNAME=... DATASET_DOWNLOAD_PASSWORD=...
+
+# Full ETL: download -> pre-MEDS wrangling -> the 8-stage MEDS-Extract pipeline.
 MEDS_extract-HIRID root_output_dir=$ROOT_OUTPUT_DIR do_download=true raw_input_dir=$RAW_INPUT_DIR
 ```
+
+## Configuration
+
+The entire ETL is described by one file, `src/HIRID_MEDS/configs/messy.yaml` — a
+[MESSY](https://github.com/mmcdermott/MEDS_extract) config carrying three sections:
+
+- **`sources:`** — where the raw data lives. `meds-extract-download` stages it, with SHA-256
+    verification and resumable transfers. This replaces the old hand-rolled `download.py`.
+- **`etl:`** — the dataset name plus curated stage options (`n_subjects_per_shard`).
+- **the event tables** — what to extract, written in
+    [dftly](https://github.com/mmcdermott/dftly) expressions.
+
+Because the config is registered under the `MEDS_extract.pipelines` entry-point group, the
+extraction half is runnable directly, without this package's CLI wrapper:
+
+```bash
+# Stage the raw data only:
+meds-extract-download spec=HIRID output_dir=$RAW_INPUT_DIR
+
+# Run the canonical 8-stage pipeline over already-pre-MEDS'd data:
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR download_key=null input_dir=$PRE_MEDS_DIR
+```
+
+The `MEDS_extract-HIRID` wrapper still exists because HiRID needs a pre-MEDS step that MESSY
+cannot yet express: extracting the `.tar.gz` archives, reshaping the observation tables, and
+deriving the pseudo-date-of-birth from `admissiontime - age`.
 
 ## MEDS-transforms settings
 

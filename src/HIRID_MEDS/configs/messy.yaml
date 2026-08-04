@@ -1,0 +1,70 @@
+# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.7).
+#
+# This single file replaces what used to be spread across four places:
+#   - `dataset.yaml`          -> the `sources:` block below
+#   - `download.py`           -> the `sources:` block below
+#   - `configs/ETL.yaml`      -> the `etl:` block below (the stage DAG is now canonical)
+#   - `configs/event_configs.yaml` -> the event tables below, rewritten in dftly
+#
+# Run the whole ETL with:
+#   meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
+# (see README.md; `HIRID` is registered via the `MEDS_extract.pipelines` entry point).
+
+sources:
+  dataset_version: 1.1.1
+
+  dataset:
+    - type: physionet
+      base_url: https://physionet.org/files/hirid/${sources.dataset_version}
+      username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
+      password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
+      # The ETL only reads the reference table and the two raw_stage archives; staging
+      # the rest of the release (notably the imputed/merged derived stages) would cost
+      # tens of GB for data this ETL never opens.
+      include:
+        - reference_data.tar.gz
+        - raw_stage/observation_tables_parquet.tar.gz
+        - raw_stage/pharma_records_parquet.tar.gz
+
+etl:
+  dataset_name: hirid
+  n_subjects_per_shard: 1000
+
+_defaults:
+  subject_id: $patientid
+
+# ---------------------------------------------------------------------------
+# `patient` is produced by the pre-MEDS step from `reference_data/general_table`:
+# it carries the pseudo-date-of-birth derived from `admissiontime` - `age`, and the
+# admission timestamp both subsequent tables offset against.
+# ---------------------------------------------------------------------------
+patient:
+  admission:
+    code: HOSPITAL_ADMISSION
+    time: $first_admitted_at_time
+  sex:
+    code: 'f"SEX//{$sex ?? ''UNK''}"'
+    time: null
+  birth:
+    code: MEDS_BIRTH
+    time: $date_of_birth
+  death:
+    code: MEDS_DEATH
+    time: $date_of_death
+  discharge:
+    code: HOSPITAL_DISCHARGE
+    time: $date_of_discharge
+
+raw_stage/pharma_records_parquet:
+  medication:
+    code: 'f"MEDICATION//{$variable_name ?? ''UNK''}"'
+    time: '$givenat::?"%Y-%m-%d %H:%M:%S"'
+    numeric_value: $givendose
+    text_value: $unit
+
+raw_stage/observation_tables:
+  observation:
+    code: 'f"OBSERVATION//{$variable_name ?? ''UNK''}//{$unit ?? ''UNK''}"'
+    time: '$datetime::?"%Y-%m-%d %H:%M:%S"'
+    numeric_value: $value
+    text_value: $stringvalue
