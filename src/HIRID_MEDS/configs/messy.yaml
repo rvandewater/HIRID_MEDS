@@ -39,14 +39,30 @@ _defaults:
   subject_id: $patientid
 
 # ---------------------------------------------------------------------------
-# `patient` is produced by the pre-MEDS step from `reference_data/general_table`:
-# it carries the pseudo-date-of-birth derived from `admissiontime` - `age`, and the
-# admission timestamp both subsequent tables offset against.
+# `reference_data/general_table` is the patient/admission table. Everything the old
+# `get_patient_link` + `save_last_event` did in polars is expressed here:
+#
+#   - the pseudo date of birth is the admission time minus the patient's age;
+#   - death / discharge times come from the LAST observation recorded for the patient, which is
+#     an aggregated join (`cols: {datetime: max}`) rather than a separate pre-MEDS pass.
+#
+# NOTE: `admissiontime` is parsed with an explicit format. The old code used polars' format
+# inference (`str.strptime(pl.Datetime, strict=True)`), so if the real column is not
+# "%Y-%m-%d %H:%M:%S" this needs adjusting -- it is the one guess in this file.
 # ---------------------------------------------------------------------------
-patient:
+
+reference_data/general_table:
+  _table:
+    join:
+      raw_stage/observation_tables: {key: patientid, cols: {datetime: max}}
+    cols:
+      _admitted: '$admissiontime::?"%Y-%m-%d %H:%M:%S"'
+      _died: '$discharge_status != "alive"'
+      date_of_birth: '$_admitted - $age::years'
+      date_of_death: '$datetime if $_died'
   admission:
     code: HOSPITAL_ADMISSION
-    time: $first_admitted_at_time
+    time: $_admitted
   sex:
     code: 'f"SEX//{$sex ?? ''UNK''}"'
     time: null
@@ -58,18 +74,19 @@ patient:
     time: $date_of_death
   discharge:
     code: HOSPITAL_DISCHARGE
-    time: $date_of_discharge
+    time: $datetime
 
 # ---------------------------------------------------------------------------
-# The reference table names its columns `Variable Name` and `Unit`. dftly's `$name` shorthand
-# cannot express a column name containing a space, but its EXPLICIT node form can -- a value of
-# `{column: Variable Name}` bypasses the string grammar entirely. `_table.cols` uses that form to
-# alias the awkward names to dftly-safe ones once, so the event expressions below stay readable
-# and no pre-MEDS renaming is needed. See https://github.com/mmcdermott/dftly/issues/96.
+# The two raw_stage tables carry real timestamps (no offsets), so they need only the variable
+# reference join. Its columns are named `Variable Name` and `Unit`; dftly's `$name` shorthand
+# cannot express a space, but the EXPLICIT node form can, so `_table.cols` aliases them once.
+# See https://github.com/mmcdermott/dftly/issues/96.
 # ---------------------------------------------------------------------------
 
 raw_stage/pharma_records_parquet:
   _table:
+    join:
+      reference_data/hirid_variable_reference: {left_on: pharmaid, right_on: ID, cols: [Variable Name, Unit]}
     cols:
       variable_name: {column: Variable Name}
       unit: {column: Unit}
@@ -81,6 +98,8 @@ raw_stage/pharma_records_parquet:
 
 raw_stage/observation_tables:
   _table:
+    join:
+      reference_data/hirid_variable_reference: {left_on: variableid, right_on: ID, cols: [Variable Name, Unit]}
     cols:
       variable_name: {column: Variable Name}
       unit: {column: Unit}
