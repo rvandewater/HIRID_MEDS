@@ -43,6 +43,20 @@ def test_subject_id_is_patientid(cfg: MessyConfig):
         assert table.subject_id_node.referenced_columns == {"patientid"}
 
 
+def test_spaced_reference_columns_are_aliased(cfg: MessyConfig):
+    """The reference table's space-containing columns are aliased via `_table.cols`.
+
+    dftly's `$name` shorthand cannot express `Variable Name` (it fails to lex), but the explicit
+    node form `{column: Variable Name}` bypasses the string grammar. Aliasing once in
+    `_table.cols` keeps the event expressions readable and avoids any pre-MEDS renaming.
+    """
+    by_prefix = {t.input_prefix: t for t in cfg.event_tables}
+    for prefix in ("raw_stage/pharma_records_parquet", "raw_stage/observation_tables"):
+        cols = by_prefix[prefix].cols
+        assert cols["variable_name"].referenced_columns == {"Variable Name"}, prefix
+        assert cols["unit"].referenced_columns == {"Unit"}, prefix
+
+
 def test_etl_block(cfg: MessyConfig):
     """The reserved `etl:` block carries the dataset identity and stage options."""
     assert cfg.etl.dataset_name == "hirid"

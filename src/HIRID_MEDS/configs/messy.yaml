@@ -55,7 +55,19 @@ patient:
     code: HOSPITAL_DISCHARGE
     time: $date_of_discharge
 
+# ---------------------------------------------------------------------------
+# The reference table names its columns `Variable Name` and `Unit`. dftly's `$name` shorthand
+# cannot express a column name containing a space, but its EXPLICIT node form can -- a value of
+# `{column: Variable Name}` bypasses the string grammar entirely. `_table.cols` uses that form to
+# alias the awkward names to dftly-safe ones once, so the event expressions below stay readable
+# and no pre-MEDS renaming is needed. See https://github.com/mmcdermott/dftly/issues/96.
+# ---------------------------------------------------------------------------
+
 raw_stage/pharma_records_parquet:
+  _table:
+    cols:
+      variable_name: {column: Variable Name}
+      unit: {column: Unit}
   medication:
     code: 'f"MEDICATION//{$variable_name ?? ''UNK''}"'
     time: '$givenat::?"%Y-%m-%d %H:%M:%S"'
@@ -63,6 +75,10 @@ raw_stage/pharma_records_parquet:
     text_value: $unit
 
 raw_stage/observation_tables:
+  _table:
+    cols:
+      variable_name: {column: Variable Name}
+      unit: {column: Unit}
   observation:
     code: 'f"OBSERVATION//{$variable_name ?? ''UNK''}//{$unit ?? ''UNK''}"'
     time: '$datetime::?"%Y-%m-%d %H:%M:%S"'
