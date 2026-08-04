@@ -1,0 +1,110 @@
+# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.7).
+#
+# This single file replaces what used to be spread across four places:
+#   - `dataset.yaml`          -> the `sources:` block below
+#   - `download.py`           -> the `sources:` block below
+#   - `configs/ETL.yaml`      -> the `etl:` block below (the stage DAG is now canonical)
+#   - `configs/event_configs.yaml` -> the event tables below, rewritten in dftly
+#
+# Run the whole ETL with:
+#   meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
+# (see README.md; `HIRID` is registered via the `MEDS_extract.pipelines` entry point).
+
+sources:
+  dataset_version: 1.1.1
+
+  dataset:
+    - type: physionet
+      base_url: https://physionet.org/files/hirid/${sources.dataset_version}
+      username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
+      password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
+      # The HiRID release mixes archive and non-archive members under one SHA256SUMS, so the
+      # unpack is declared source-level and applied per member. `auto` infers the format from
+      # each filename and is a no-op on non-archives (README.md, *.csv.gz -- gz compression is
+      # not a tar archive), so only the real .tar.gz members are expanded.
+      unarchive: auto
+      # The ETL only reads the reference table and the two raw_stage archives; staging
+      # the rest of the release (notably the imputed/merged derived stages) would cost
+      # tens of GB for data this ETL never opens.
+      include:
+        - reference_data.tar.gz
+        - raw_stage/observation_tables_parquet.tar.gz
+        - raw_stage/pharma_records_parquet.tar.gz
+
+etl:
+  dataset_name: hirid
+  n_subjects_per_shard: 1000
+
+_defaults:
+  subject_id: $patientid
+
+# ---------------------------------------------------------------------------
+# `reference_data/general_table` is the patient/admission table. Everything the old
+# `get_patient_link` + `save_last_event` did in polars is expressed here:
+#
+#   - the pseudo date of birth is the admission time minus the patient's age;
+#   - death / discharge times come from the LAST observation recorded for the patient, which is
+#     an aggregated join (`cols: {datetime: max}`) rather than a separate pre-MEDS pass.
+#
+# NOTE: `admissiontime` is parsed with an explicit format. The old code used polars' format
+# inference (`str.strptime(pl.Datetime, strict=True)`), so if the real column is not
+# "%Y-%m-%d %H:%M:%S" this needs adjusting -- it is the one guess in this file.
+# ---------------------------------------------------------------------------
+
+reference_data/general_table:
+  _table:
+    join:
+      raw_stage/observation_tables: {key: patientid, cols: {datetime: max}}
+    cols:
+      _admitted: '$admissiontime::?"%Y-%m-%d %H:%M:%S"'
+      _died: '$discharge_status != "alive"'
+      date_of_birth: '$_admitted - $age::years'
+      date_of_death: '$datetime if $_died'
+  admission:
+    code: HOSPITAL_ADMISSION
+    time: $_admitted
+  sex:
+    code: 'f"SEX//{$sex ?? ''UNK''}"'
+    time: null
+  birth:
+    code: MEDS_BIRTH
+    time: $date_of_birth
+  death:
+    code: MEDS_DEATH
+    time: $date_of_death
+  discharge:
+    code: HOSPITAL_DISCHARGE
+    time: $datetime
+
+# ---------------------------------------------------------------------------
+# The two raw_stage tables carry real timestamps (no offsets), so they need only the variable
+# reference join. Its columns are named `Variable Name` and `Unit`; dftly's `$name` shorthand
+# cannot express a space, but the EXPLICIT node form can, so `_table.cols` aliases them once.
+# See https://github.com/mmcdermott/dftly/issues/96.
+# ---------------------------------------------------------------------------
+
+raw_stage/pharma_records_parquet:
+  _table:
+    join:
+      reference_data/hirid_variable_reference: {left_on: pharmaid, right_on: ID, cols: [Variable Name, Unit]}
+    cols:
+      variable_name: {column: Variable Name}
+      unit: {column: Unit}
+  medication:
+    code: 'f"MEDICATION//{$variable_name ?? ''UNK''}"'
+    time: '$givenat::?"%Y-%m-%d %H:%M:%S"'
+    numeric_value: $givendose
+    text_value: $unit
+
+raw_stage/observation_tables:
+  _table:
+    join:
+      reference_data/hirid_variable_reference: {left_on: variableid, right_on: ID, cols: [Variable Name, Unit]}
+    cols:
+      variable_name: {column: Variable Name}
+      unit: {column: Unit}
+  observation:
+    code: 'f"OBSERVATION//{$variable_name ?? ''UNK''}//{$unit ?? ''UNK''}"'
+    time: '$datetime::?"%Y-%m-%d %H:%M:%S"'
+    numeric_value: $value
+    text_value: $stringvalue

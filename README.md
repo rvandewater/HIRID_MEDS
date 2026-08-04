@@ -23,10 +23,31 @@ The dataset contains de-identified demographic information and a total of 712 ro
 source: https://hirid.intensivecare.ai/
 
 ```bash
-pip install HIRID_MEDS # you can do this locally or via PyPI
-# Download your data or set download credentials
-MEDS_extract-HIRID root_output_dir=$ROOT_OUTPUT_DIR do_download=true raw_input_dir=$RAW_INPUT_DIR
+pip install HIRID_MEDS
+export DATASET_DOWNLOAD_USERNAME=... DATASET_DOWNLOAD_PASSWORD=...
+
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
 ```
+
+## Configuration
+
+**This package contains no ETL code.** The entire pipeline is one file,
+[`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml), registered under the
+`MEDS_extract.pipelines` entry-point group.
+
+Everything the old `pre_MEDS.py` did is now config:
+
+| Was | Now |
+| --- | --- |
+| `.tar.gz` extraction | `unarchive: auto` on the PhysioNet source |
+| `get_patient_link` — pseudo DOB | `_table.cols`: `date_of_birth: $_admitted - $age::years` |
+| `save_last_event` — death/discharge from last observation | `_table.join` with `cols: {datetime: max}` |
+| Variable-reference join | `_table.join` on `pharmaid`/`variableid` → `ID` |
+
+The reference table's `Variable Name` / `Unit` columns contain spaces, which dftly's `$name`
+shorthand cannot express; `_table.cols` aliases them once using the explicit `{column: ...}` form
+(see [dftly#96](https://github.com/mmcdermott/dftly/issues/96)).
+
 
 ## MEDS-transforms settings
 
