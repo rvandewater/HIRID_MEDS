@@ -18,6 +18,11 @@ sources:
       base_url: https://physionet.org/files/hirid/${sources.dataset_version}
       username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
       password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
+      # The HiRID release mixes archive and non-archive members under one SHA256SUMS, so the
+      # unpack is declared source-level and applied per member. `auto` infers the format from
+      # each filename and is a no-op on non-archives (README.md, *.csv.gz -- gz compression is
+      # not a tar archive), so only the real .tar.gz members are expanded.
+      unarchive: auto
       # The ETL only reads the reference table and the two raw_stage archives; staging
       # the rest of the release (notably the imputed/merged derived stages) would cost
       # tens of GB for data this ETL never opens.
