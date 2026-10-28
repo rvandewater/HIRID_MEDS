@@ -1,10 +1,12 @@
 [build-system]
-requires = ["setuptools>=64", "setuptools-scm>=8.0", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "HIRID-MEDS"
-dynamic = ["version"]
+# Bump with `uv version --bump patch|minor|major`, then tag the commit with the same version
+# (see CONTRIBUTING.md); the publish workflow rejects a tag that does not match.
+version = "0.0.4"
 authors = [
     {name= "Robin van de Water", email="robin.vandewater@hpi.de"},
 ]
@@ -20,11 +22,7 @@ classifiers = [
 # CLIs (`meds-extract-download`, `meds-extract-run`) and every extraction stage.
 dependencies = ["MEDS-extract[download]>=0.7.1,<0.8"]
 
-[tool.setuptools_scm]
-
 [project.optional-dependencies]
-dev = ["pre-commit<4"]
-tests = ["pytest"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 
@@ -33,9 +31,20 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 [project.entry-points."MEDS_extract.pipelines"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
 
+[dependency-groups]
+# Installed by a plain `uv sync`.
+dev = ["pre-commit<4", "pytest"]
+
 [project.urls]
-Homepage = "https://github.com/mmcdermott/ETL_MEDS_Template"
-Issues = "https://github.com/mmcdermott/ETL_MEDS_Template/issues"
+Homepage = "https://github.com/rvandewater/HIRID_MEDS"
+Issues = "https://github.com/rvandewater/HIRID_MEDS/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["HIRID_MEDS*"]
+
+[tool.setuptools.package-data]
+HIRID_MEDS = ["configs/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

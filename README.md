@@ -171,11 +171,13 @@ generates raw files straight from the config with
 events.
 
 ```bash
-uv venv && uv pip install -e ".[tests]"
+uv sync
 uv run pytest tests/ -v
+uv run pre-commit run --all-files
 ```
 
-To run the synthetic ETL locally:
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development and release workflow. To run the
+synthetic ETL locally:
 
 ```bash
 uv pip install "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"

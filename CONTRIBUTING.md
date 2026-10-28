@@ -1,14 +1,15 @@
 # Contributing
 
-This repository is a **MEDS-Extract 0.7 ETL**. Almost all of it is one declarative file; there is
-very little Python to change.
+This repository is a **MEDS-Extract 0.7 ETL**. All of it is one declarative file; there is no
+Python to change.
 
 ```bash
-pip install INSPIRE_MEDS
+pip install HIRID-MEDS
 export DATASET_DOWNLOAD_USERNAME=$PHYSIONET_USERNAME
 export DATASET_DOWNLOAD_PASSWORD=$PHYSIONET_PASSWORD
+export POLARS_ENGINE_AFFINITY=streaming
 
-MEDS_extract-INSPIRE $ROOT_OUTPUT_DIR
+meds-extract-run spec=HIRID output_dir=$ROOT_OUTPUT_DIR
 ```
 
 ## What the 0.7 layout looks like
@@ -23,14 +24,14 @@ Under MEDS-Transforms 0.2.x an ETL was a Python package: `pre_MEDS.py` reshaped 
 | `dataset.yaml` + `download.py` | the `sources:` block                                                      |
 | `configs/ETL.yaml`             | nothing — the stage sequence is canonical and not configurable            |
 | `configs/event_configs.yaml`   | the event tables, written in [dftly](https://github.com/mmcdermott/dftly) |
-| `pre_MEDS.py`                  | mostly `_table.join` / `_table.cols` (see the exception below)            |
+| `pre_MEDS.py`                  | `_table.join` / `_table.cols`                                             |
 
-The file lives at [`src/INSPIRE_MEDS/messy.yaml`](src/INSPIRE_MEDS/messy.yaml) and is registered
-under the `MEDS_extract.pipelines` entry-point group in `pyproject.toml`:
+The file lives at [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml) and is
+registered under the `MEDS_extract.pipelines` entry-point group in `pyproject.toml`:
 
 ```toml
 [project.entry-points."MEDS_extract.pipelines"]
-INSPIRE = "INSPIRE_MEDS:messy.yaml"
+HIRID = "HIRID_MEDS.configs:messy.yaml"
 ```
 
 That value is **parsed, not imported** — it names a package and a data file inside it, which is
@@ -54,20 +55,27 @@ Also worth knowing: a table may declare **exactly one** `_table.join`, `_table.c
 evaluated in order so later ones may reference earlier ones, and adding a Duration to a Datetime
 must be written as `anchor - (-$offset)::minutes` because `+` does not lower correctly.
 
-## The one piece of Python
+Specific to HiRID:
 
-`MEDS_BIRTH` and `MEDS_DEATH` are per-**subject** facts, but INSPIRE records what they derive from
-on `operations`, which is one row per **operation**. MESSY cannot reduce a table over its own rows
-— self-joins are rejected and dftly is strictly row-wise — so
-[`src/INSPIRE_MEDS/pre_MEDS.py`](src/INSPIRE_MEDS/pre_MEDS.py) reduces `operations` to one row per
-subject, and the config joins that side table back.
+- **Join keys must have identical dtypes on both sides**, or polars panics. The raw parquet ids
+    are `Int32` and the CSV reference tables are inferred as `Int64`, so every join uses a cast,
+    derived key (`_ref_id: $variableid::int64`, `_obs_patientid: $patientid::int32`).
+- **The variable reference is joined on (`ID`, `Source Table`)**, not `ID` alone: one id is both
+    an observation and a drug. Keep the id first — MESSY-synth keeps the first right-hand key
+    unique per row, and the `Source Table` literal has to repeat.
+- **Columns with spaces** (`Variable Name`, `Unit`) cannot be written as `$name`; alias them once in
+    `_table.cols` with the explicit form `{column: Variable Name}`.
 
-`MEDS_extract-INSPIRE` chains the three steps: `meds-extract-download`, that reduction, then
-`meds-extract-run`. It stages the side table in a directory of **symlinks** to the raw release, so
-the checksum-verified download is never modified.
+Why each choice was made, and what it changes in the output, is recorded in
+[`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md).
 
-If you are porting another dataset and it needs no such reduction, drop the Python entirely and
-let users call `meds-extract-run spec=<NAME>` directly.
+## No Python
+
+Everything the old `pre_MEDS.py` did is expressible in MESSY: archive extraction is the download
+layer's `unarchive: auto`, the pseudo date of birth is a `_table.cols` expression, and the
+last-observation discharge/death time is an aggregated join (`cols: {datetime: max}`). Users call
+`meds-extract-run spec=HIRID` directly. Keep it that way unless a transformation genuinely cannot
+be written in MESSY (for example, reducing a table over its own rows, which MESSY rejects).
 
 ## Testing
 
@@ -77,16 +85,27 @@ uv run pytest tests/
 uv run pre-commit run --all-files
 ```
 
-There is no demo release for INSPIRE, so there is no end-to-end CI test — the credentialed
-download cannot run in CI. Changes that affect the output should be validated by running the ETL
-over the real release and comparing cohort statistics before and after.
+There is no demo release for HiRID, and the credentialed download cannot run in CI. CI instead
+runs two checks that need no real data:
+
+- [`tests/test_etl.py`](tests/test_etl.py) runs the whole ETL over a small hand-written fixture
+    with the release's layout and dtypes, and checks specific values (the shared-id join, dtype
+    alignment, fallback codes, text values, patient events).
+- The [synthetic ETL workflow](.github/workflows/synthetic-etl.yaml) generates raw files straight
+    from the config with [MESSY-synth](https://github.com/rvandewater/MESSY_synth) and fails if
+    any event yields no rows.
+
+Changes that affect the output should also be validated by running the ETL over the real release
+and comparing cohort statistics before and after. HiRID is credentialed data: compare aggregate
+statistics only, and do not paste rows into issues, PRs or logs.
 
 ## Changing what the ETL emits
 
 Any change to codes, timestamps or which rows are emitted is a change to everybody's downstream
 cohort. State the measured effect in the PR — row counts, subject counts, code-vocabulary size
 before and after — rather than only describing the intent. Several defects in this repository were
-found precisely because those numbers were compared.
+found precisely because those numbers were compared
+([#10](https://github.com/rvandewater/HIRID_MEDS/issues/10)).
 
 # Development
 
@@ -100,7 +119,6 @@ uv sync
 uv run pre-commit install
 uv run pre-commit run --all-files
 uv run pytest
-uv run mkdocs build --strict
 ```
 
 A plain `pre-commit run` checks only staged files, so hooks legitimately skip
@@ -132,7 +150,7 @@ to PyPI and creates the GitHub release.
 
 ```bash
 uv sync
-uv version --bump patch   # 0.0.12 → 0.0.13
-uv version --bump minor   # 0.0.12 → 0.1.0
-uv version --bump major   # 0.0.12 → 1.0.0
+uv version --bump patch   # 0.0.4 → 0.0.5
+uv version --bump minor   # 0.0.4 → 0.1.0
+uv version --bump major   # 0.0.4 → 1.0.0
 ```

@@ -25,9 +25,7 @@ jobs:
       # The tests run the whole ETL over a small hand-written fixture shaped like the real HiRID
       # release; no credentials or real data are needed.
       - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[tests]"
+        run: uv sync --locked
 
       - name: Run tests
-        run: .venv/bin/python -m pytest tests -v
+        run: uv run pytest tests -v

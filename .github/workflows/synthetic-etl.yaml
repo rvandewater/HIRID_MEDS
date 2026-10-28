@@ -42,11 +42,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv venv
+          uv sync --locked
           # The variable-reference join is keyed on derived columns (a `Source Table` literal and a
           # cast id). Released MESSY_synth cannot adopt join keys through those; pin the commit
           # that can (mmcdermott/MESSY_synth#12) until it is merged and released.
-          uv pip install -e . "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
+          uv pip install "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
 
       - name: Generate and extract synthetic data
         run: |
