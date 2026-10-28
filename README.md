@@ -16,6 +16,7 @@
 > drug-named event to ~24M observation rows (3.1%), mislabels ~123k rows, and drops ~79k. Please
 > re-extract with this version. Details:
 > [#10](https://github.com/rvandewater/HIRID_MEDS/issues/10).
+> **This is fixed in 0.1.0 with the update to MEDS-Extract 0.7**
 
 This pipeline extracts the
 [HiRID high time-resolution ICU dataset v1.1.1](https://physionet.org/content/hirid/1.1.1/) from
@@ -184,7 +185,7 @@ uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_s
 
 ## Citation
 
-If you use this ETL, please cite the HiRID database and its original publication:
+If you use this ETL, please cite the HiRID database:
 
 ```bibtex
 @article{PhysioNet-hirid-1.1.1,
@@ -192,31 +193,46 @@ If you use this ETL, please cite the HiRID database and its original publication
   title = {{HiRID, a high time-resolution ICU dataset}},
   journal = {{PhysioNet}},
   year = {2021},
+  month = feb,
   note = {Version 1.1.1},
   doi = {10.13026/nkwc-js72},
   url = {https://doi.org/10.13026/nkwc-js72}
 }
+```
 
-@article{hyland2020early,
-  author = {Hyland, Stephanie L. and Faltys, Martin and Hüser, Matthias and others},
-  title = {{Early prediction of circulatory failure in the intensive care unit using machine learning}},
-  journal = {Nature Medicine},
-  volume = {26},
-  pages = {364--373},
-  year = {2020},
-  doi = {10.1038/s41591-020-0789-4}
+And its original publication:
+
+```bibtex
+@ARTICLE{Hyland2020-vq,
+  title     = "Early prediction of circulatory failure in the intensive care
+               unit using machine learning",
+  author    = "Hyland, Stephanie L and Faltys, Martin and Hüser, Matthias
+               and Lyu, Xinrui and Gumbsch, Thomas and Esteban, Cristóbal
+               and Bock, Christian and Horn, Max and Moor, Michael and Rieck,
+               Bastian and Zimmermann, Marc and Bodenham, Dean and Borgwardt,
+               Karsten and Rätsch, Gunnar and Merz, Tobias M",
+  journal   = "Nat. Med.",
+  publisher = "Springer Science and Business Media LLC",
+  volume    =  26,
+  number    =  3,
+  pages     = "364--373",
+  month     =  mar,
+  year      =  2020,
+  language  = "en"
 }
 ```
 
 And this ETL:
 
 ```bibtex
-@software{van_de_Water_HIRID_MEDS,
-  author = {van de Water, Robin Philippus},
-  title = {{HIRID MEDS ETL}},
-  doi = {10.5281/zenodo.17370178},
-  license = {MIT},
-  url = {https://github.com/rvandewater/HIRID_MEDS}
+@software{van_de_Water_HIRID_MEDS_ETL_2025,
+author = {van de Water, Robin Philippus},
+doi = {10.5281/zenodo.17370179},
+license = {MIT},
+month = oct,
+title = {{HIRID MEDS ETL}},
+url = {https://github.com/rvandewater/HIRID_MEDS},
+year = {2025}
 }
 ```
 
