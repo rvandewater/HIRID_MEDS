@@ -93,7 +93,8 @@ general_table:
 # `Source Table`: a handful of ids are both an observation `variableid` and a `pharmaid`. Joining
 # on `ID` alone would fan those rows out into one event per source table, so the join key also
 # carries a literal `Source Table` value. `ID` is Int64 (CSV-inferred) while the raw ids are
-# Int32, so the id key is cast to match.
+# Int32, so the id key is cast to match. The id comes first: MESSY-synth keeps the first right-hand
+# key unique per row and lets the later ones repeat, which a literal filter key has to.
 #
 # A few ids in the raw tables have no entry under their own `Source Table` (HiRID 1.1.1: 5
 # observation and 2 pharma ids). Their code falls back to the raw id, so they stay distinct
@@ -108,8 +109,8 @@ raw_stage/pharma_records/parquet:
   _table:
     join:
       hirid_variable_reference:
-        left_on: [_ref_table, _ref_id]
-        right_on: [Source Table, ID]
+        left_on: [_ref_id, _ref_table]
+        right_on: [ID, Source Table]
         cols: [Variable Name]
     cols:
       _ref_table: "'Pharma'"
@@ -127,8 +128,8 @@ raw_stage/observation_tables/parquet:
   _table:
     join:
       hirid_variable_reference:
-        left_on: [_ref_table, _ref_id]
-        right_on: [Source Table, ID]
+        left_on: [_ref_id, _ref_table]
+        right_on: [ID, Source Table]
         cols: [Variable Name, Unit]
     cols:
       _ref_table: "'Observation'"

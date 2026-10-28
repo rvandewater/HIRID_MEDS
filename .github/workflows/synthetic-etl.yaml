@@ -1,0 +1,58 @@
+name: Synthetic ETL for MESSY files using MESSY_synth
+
+# Generates raw files straight from the shipped MESSY config with MESSY-synth and runs the ETL over
+# them. MESSY-synth validates that every event block yields events and fails the job otherwise, so
+# this catches expressions that only work on the dtypes of one particular release. It complements
+# the hand-written fixture in tests/test_etl.py, which checks specific values.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, "release/*", "dev", "feat/*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-etl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        # MESSY-synth requires Python >= 3.12.
+        python-version: ["3.12", "3.13"]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          # The variable-reference join is keyed on derived columns (a `Source Table` literal and a
+          # cast id). Released MESSY_synth cannot adopt join keys through those; pin the commit
+          # that can (mmcdermott/MESSY_synth#12) until it is merged and released.
+          uv pip install -e . "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
+
+      - name: Generate and extract synthetic data
+        run: |
+          uv run --no-sync MESSY-synth ./src/HIRID_MEDS/configs/messy.yaml -o raw_synthetic/ --explain
+          uv run --no-sync meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth \
+            input_dir=raw_synthetic do_download=false
+          for f in dataset.json codes.parquet subject_splits.parquet; do
+            test -f "HIRID_meds_synth/metadata/$f"
+          done

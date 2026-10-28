@@ -50,13 +50,15 @@ extract should re-run; tracked in
 
 ## Decisions made in this PR
 
-### D1. Variable-reference join is keyed on (`Source Table`, `ID`) — *bug fix*
+### D1. Variable-reference join is keyed on (`ID`, `Source Table`) — *bug fix*
 
 `hirid_variable_reference.ID` is unique only within a `Source Table`: one id is listed as both an
 `Observation` and a `Pharma` variable. The previous config (and the pre-0.7 `pre_MEDS.py`) joined
 on `ID` alone, which fans every row with that id out into two events, one carrying the wrong
 table's name. The join now adds a literal `Source Table` value on the left
-(`_ref_table: "'Observation'"` / `"'Pharma'"`) and joins on both columns.
+(`_ref_table: "'Observation'"` / `"'Pharma'"`) and joins on both columns. The id is listed
+first because MESSY-synth keeps the first right-hand key unique per row, and the literal key has to
+repeat; the order does not change the ETL output (verified identical on a 5-part real-data sample).
 
 ### D2. Join keys are cast to matching dtypes — *bug fix*
 
@@ -64,8 +66,10 @@ Polars panics (`cannot get ref Int32 from Int64`) when the two sides of a join h
 integer types, and MEDS-Extract 0.7.1 does not align them. In HiRID the raw parquet ids
 (`patientid`, `variableid`, `pharmaid`) are `Int32`, while the CSV-derived reference tables are
 inferred as `Int64`. The config therefore joins on derived, cast keys (`_ref_id: $variableid::int64`,
-`_obs_patientid: $patientid::int32`). This ties the config to the release's dtypes; see
-[#7](https://github.com/rvandewater/HIRID_MEDS/issues/7).
+`_obs_patientid: $patientid::int32`). This ties the config to the release's dtypes. MESSY-synth
+generates matching dtypes for these derived keys as of
+[mmcdermott/MESSY_synth#12](https://github.com/mmcdermott/MESSY_synth/pull/12), which the synthetic
+CI workflow pins ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)).
 
 ### D3. Unreferenced ids fall back to the raw id in the code
 
@@ -173,8 +177,9 @@ Each has a GitHub issue with the options and the data behind them.
     `pharma_records.recordstatus`/`typeid`/`infusionid` are ignored, as before. Some of these likely
     mark invalidated or corrected records.
 - **`UNK` placeholders** ([#6](https://github.com/rvandewater/HIRID_MEDS/issues/6), D11): keep `UNK` for "no unit", or omit the component?
-- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). MESSY_synth cannot yet generate data whose join-key dtypes match the
-    real release (D2), so CI runs a hand-written fixture instead (`tests/test_etl.py`).
+- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow pins an unmerged MESSY_synth commit
+    ([mmcdermott/MESSY_synth#12](https://github.com/mmcdermott/MESSY_synth/pull/12)); move the pin
+    to a release once it lands. `tests/test_etl.py` checks specific values on a hand-written fixture.
 
 ## Validation
 
