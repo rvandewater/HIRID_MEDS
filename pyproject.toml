@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "HIRID-MEDS"
 # Bump with `uv version --bump patch|minor|major`, then tag the commit with the same version
 # (see CONTRIBUTING.md); the publish workflow rejects a tag that does not match.
-version = "0.0.4"
+version = "0.1.0"
 authors = [
     {name= "Robin van de Water", email="robin.vandewater@hpi.de"},
 ]
