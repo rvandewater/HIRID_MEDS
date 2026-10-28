@@ -1,7 +1,13 @@
+"""HiRID MEDS ETL -- a pure-config MEDS-Extract pipeline.
+
+This package contains no ETL code. The entire pipeline is `configs/messy.yaml`, registered under
+the `MEDS_extract.pipelines` entry-point group, so it runs as:
+
+    meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
+"""
+
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
-
-from omegaconf import OmegaConf
 
 __package_name__ = "HIRID_MEDS"
 try:
@@ -9,31 +15,10 @@ try:
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
-MAIN_CFG = files(__package_name__).joinpath("configs/main.yaml")
-EVENT_CFG = files(__package_name__).joinpath("configs/event_configs.yaml")
-ETL_CFG = files(__package_name__).joinpath("configs/ETL.yaml")
-RUNNER_CFG = files(__package_name__).joinpath("configs/runner.yaml")
-PRE_MEDS_PY = files(__package_name__).joinpath("pre_MEDS.py")
-PRE_MEDS_CFG = files(__package_name__).joinpath("configs/pre_MEDS.yaml")
-DATASET_CFG = files(__package_name__).joinpath("dataset.yaml")
+# The name this ETL registers under `MEDS_extract.pipelines`; `meds-extract-run spec=HIRID`
+# resolves it, and MEDS-Extract uses it as the default dataset name.
+PIPELINE_NAME = "HIRID"
 
-dataset_info = OmegaConf.load(DATASET_CFG)
-premeds_cfg = OmegaConf.load(PRE_MEDS_CFG)
+MESSY_CFG = files(__package_name__).joinpath("configs/messy.yaml")
 
-HAS_PRE_MEDS = PRE_MEDS_PY.exists()
-
-event_config = OmegaConf.load(EVENT_CFG)
-
-__all__ = [
-    "event_config",
-    "EVENT_CFG",
-    "ETL_CFG",
-    "HAS_PRE_MEDS",
-    "PRE_MEDS_CFG",
-    "MAIN_CFG",
-    "RUNNER_CFG",
-    "DATASET_CFG",
-    "dataset_info",
-    "__package_name__",
-    "__version__",
-]
+__all__ = ["MESSY_CFG", "PIPELINE_NAME", "__package_name__", "__version__"]

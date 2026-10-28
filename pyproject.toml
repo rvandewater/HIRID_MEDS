@@ -10,28 +10,32 @@ authors = [
 ]
 description = "An ETL pipeline to extract HIRID data into the MEDS format."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11.4,<3.14"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = [
-  "meds-transforms~=0.2.4", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars<1.30.0"
-
-]
+# Pure-config ETL: the only runtime dependency is MEDS-Extract itself, which supplies both
+# CLIs (`meds-extract-download`, `meds-extract-run`) and every extraction stage.
+dependencies = ["MEDS-extract[download]>=0.7.1,<0.8"]
 
 [tool.setuptools_scm]
 
 [project.optional-dependencies]
 dev = ["pre-commit<4"]
-tests = ["pytest", "pytest-cov"]
+tests = ["pytest"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 
-[project.scripts]
-MEDS_extract-HIRID = "HIRID_MEDS.__main__:main"
+# Registers the bundled MESSY file as a MEDS-Extract dataset pipeline, so the whole
+# ETL is runnable as `meds-extract-run spec=HIRID output_dir=...`.
+[project.entry-points."MEDS_extract.pipelines"]
+HIRID = "HIRID_MEDS.configs:messy.yaml"
 
 [project.urls]
 Homepage = "https://github.com/mmcdermott/ETL_MEDS_Template"
 Issues = "https://github.com/mmcdermott/ETL_MEDS_Template/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

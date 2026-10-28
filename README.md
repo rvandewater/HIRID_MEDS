@@ -11,7 +11,15 @@
 ![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
 [![DOI](https://zenodo.org/badge/936180918.svg)](https://doi.org/10.5281/zenodo.17370178)
 
-Warning: This ETL currently needs a lot of resources to run.
+> [!WARNING]
+> **Extracts made with HIRID_MEDS 0.0.1–0.0.4 contain duplicated, mislabeled and missing events.**
+> Those releases joined the variable reference on `ID` alone. On HiRID 1.1.1 that adds a second,
+> drug-named event to ~24M observation rows (3.1%), mislabels ~123k rows, and drops ~79k. Please
+> re-extract with this version. Details:
+> [#10](https://github.com/rvandewater/HIRID_MEDS/issues/10).
+
+Warning: This ETL needs a lot of memory unless polars' streaming engine is enabled; see
+[Resources and parallelism](#resources-and-parallelism).
 
 This repository contains the ETL (Extract, Transform, Load) code to convert the HIRID dataset
 into the [MEDS](https://medical-event-data-standard.github.io/) ecosystem.
@@ -23,34 +31,106 @@ The dataset contains de-identified demographic information and a total of 712 ro
 source: https://hirid.intensivecare.ai/
 
 ```bash
-pip install HIRID_MEDS # you can do this locally or via PyPI
-# Download your data or set download credentials
-MEDS_extract-HIRID root_output_dir=$ROOT_OUTPUT_DIR do_download=true raw_input_dir=$RAW_INPUT_DIR
+pip install HIRID_MEDS
+export DATASET_DOWNLOAD_USERNAME=... DATASET_DOWNLOAD_PASSWORD=...
+export POLARS_ENGINE_AFFINITY=streaming  # see "Resources and parallelism"
+
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
 ```
 
-## MEDS-transforms settings
+This downloads only the three release files the ETL reads (`reference_data.tar.gz`,
+`raw_stage/observation_tables_parquet.tar.gz`, `raw_stage/pharma_records_parquet.tar.gz`, ~7 GB),
+unpacks them, and runs the extraction.
 
-If you want to convert a large dataset, you can use parallelization with MEDS-transforms
-(the MEDS-transformation step that takes the longest).
+### Using an existing download
 
-Using local parallelization with the `hydra-joblib-launcher` package, you can set the number of workers:
-
-```
-pip install hydra-joblib-launcher --upgrade
-```
-
-Then, you can set the number of workers as environment variable:
+If you already have the release on disk, point the ETL at it and skip the download:
 
 ```bash
-export N_WORKERS=8
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR do_download=false input_dir=$HIRID_DIR
 ```
 
-Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many
-subjects you have in your dataset:
+`$HIRID_DIR` must contain the **unpacked** files, laid out the way the download step leaves them:
+
+```
+$HIRID_DIR/
+├── general_table.csv                    # from reference_data.tar.gz
+├── hirid_variable_reference.csv         # from reference_data.tar.gz
+└── raw_stage/
+    ├── observation_tables/parquet/part-*.parquet
+    └── pharma_records/parquet/part-*.parquet
+```
+
+All three archives are required; the two `raw_stage` parquet archives alone are not enough, as
+patients, demographics and variable names come from `reference_data.tar.gz`. To unpack a manual
+download:
 
 ```bash
-export N_SUBJECTS_PER_SHARD=100000
+cd $HIRID_DIR
+tar -xzf reference_data.tar.gz
+(cd raw_stage && tar -xzf observation_tables_parquet.tar.gz && tar -xzf pharma_records_parquet.tar.gz)
 ```
+
+Note that the download step only unpacks files it fetches itself: archives already present with a
+matching checksum are skipped and therefore *not* unpacked.
+
+## Configuration
+
+**This package contains no ETL code.** The entire pipeline is one file,
+[`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml), registered under the
+`MEDS_extract.pipelines` entry-point group.
+
+Everything the old `pre_MEDS.py` did is now config:
+
+| Was                                                       | Now                                                      |
+| --------------------------------------------------------- | -------------------------------------------------------- |
+| `.tar.gz` extraction                                      | `unarchive: auto` on the PhysioNet source                |
+| `get_patient_link` — pseudo DOB                           | `_table.cols`: `date_of_birth: $_admitted - $age::years` |
+| `save_last_event` — death/discharge from last observation | `_table.join` with `cols: {datetime: max}`               |
+| Variable-reference join                                   | `_table.join` on (`Source Table`, `ID`)                  |
+
+The modelling choices behind the config (codes, null handling, deduplication, what counts as
+death/discharge) and the numbers from a full run are documented in
+[`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md).
+
+## Output
+
+| Code                                   | Time                                                   | `numeric_value` | `text_value`                   |
+| -------------------------------------- | ------------------------------------------------------ | --------------- | ------------------------------ |
+| `HOSPITAL_ADMISSION`                   | `admissiontime`                                        |                 |                                |
+| `SEX//{sex}`                           | static                                                 |                 |                                |
+| `MEDS_BIRTH`                           | `admissiontime - age` (age is binned)                  |                 |                                |
+| `HOSPITAL_DISCHARGE`                   | last observation                                       |                 |                                |
+| `MEDS_DEATH`                           | last observation, if `discharge_status` is not `alive` |                 |                                |
+| `OBSERVATION//{Variable Name}//{Unit}` | `datetime`                                             | `value`         | `stringvalue` (non-empty only) |
+| `MEDICATION//{Variable Name}`          | `givenat`                                              | `givendose`     | `doseunit`                     |
+
+## Resources and parallelism
+
+A full run reads ~777M observation rows. Run it with polars' streaming engine:
+
+```bash
+export POLARS_ENGINE_AFFINITY=streaming
+```
+
+With it, a full run takes ~13 minutes and peaks at ~9.5 GB RSS (single worker, 10-core / 24 GB
+laptop). Without it, `split_and_shard_subjects` is killed for running out of memory on the same
+machine: MEDS-Extract applies each table's variable-reference join before collecting subject ids,
+so the in-memory engine materializes the join over every observation row.
+
+Stages can also run in parallel through a MEDS-transforms stage-runner file:
+
+```bash
+pip install "HIRID_MEDS[local_parallelism]"
+cat > runner.yaml <<'YAML'
+parallelize:
+  n_workers: 8
+  launcher: joblib
+YAML
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR stage_runner_fp=runner.yaml
+```
+
+`etl.n_subjects_per_shard` in the config (default 1000) controls the shard size.
 
 ## Citation
 
