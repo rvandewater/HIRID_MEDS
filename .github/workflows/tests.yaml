@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, "release/*", "dev", "feat/*"]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      # The tests run the whole ETL over a small hand-written fixture shaped like the real HiRID
+      # release; no credentials or real data are needed.
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install -e ".[tests]"
+
+      - name: Run tests
+        run: .venv/bin/python -m pytest tests -v

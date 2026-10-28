@@ -39,27 +39,38 @@ _defaults:
   subject_id: $patientid
 
 # ---------------------------------------------------------------------------
-# `reference_data/general_table` is the patient/admission table. Everything the old
-# `get_patient_link` + `save_last_event` did in polars is expressed here:
+# `general_table` (from `reference_data.tar.gz`, which unpacks flat into the input root) is the
+# patient/admission table. Everything the old `get_patient_link` + `save_last_event` did in polars
+# is expressed here:
 #
 #   - the pseudo date of birth is the admission time minus the patient's age;
 #   - death / discharge times come from the LAST observation recorded for the patient, which is
 #     an aggregated join (`cols: {datetime: max}`) rather than a separate pre-MEDS pass.
 #
+# Join keys must have identical dtypes on both sides (polars panics otherwise). `patientid` is
+# Int64 here (inferred from the CSV) but Int32 in the raw_stage parquet files, so the join uses a
+# derived Int32 copy of the key.
+#
 # NOTE: `admissiontime` is parsed with an explicit format. The old code used polars' format
 # inference (`str.strptime(pl.Datetime, strict=True)`), so if the real column is not
-# "%Y-%m-%d %H:%M:%S" this needs adjusting -- it is the one guess in this file.
+# "%Y-%m-%d %H:%M:%S" this needs adjusting. Unparsable values drop the row with a WARNING.
 # ---------------------------------------------------------------------------
 
-reference_data/general_table:
+general_table:
   _table:
     join:
-      raw_stage/observation_tables: {key: patientid, cols: {datetime: max}}
+      raw_stage/observation_tables/parquet:
+        {
+          left_on: _obs_patientid,
+          right_on: patientid,
+          cols: { datetime: max },
+        }
     cols:
+      _obs_patientid: "$patientid::int32"
       _admitted: '$admissiontime::?"%Y-%m-%d %H:%M:%S"'
       _died: '$discharge_status != "alive"'
-      date_of_birth: '$_admitted - $age::years'
-      date_of_death: '$datetime if $_died'
+      date_of_birth: "$_admitted - $age::years"
+      date_of_death: "$datetime if $_died"
   admission:
     code: HOSPITAL_ADMISSION
     time: $_admitted
@@ -77,34 +88,58 @@ reference_data/general_table:
     time: $datetime
 
 # ---------------------------------------------------------------------------
-# The two raw_stage tables carry real timestamps (no offsets), so they need only the variable
-# reference join. Its columns are named `Variable Name` and `Unit`; dftly's `$name` shorthand
-# cannot express a space, but the EXPLICIT node form can, so `_table.cols` aliases them once.
+# The two raw_stage tables are parquet with native timestamp columns, so `time` needs no cast.
+#
+# Variable names come from `hirid_variable_reference`, whose `ID` is only unique WITHIN a
+# `Source Table`: a handful of ids are both an observation `variableid` and a `pharmaid`. Joining
+# on `ID` alone would fan those rows out into one event per source table, so the join key also
+# carries a literal `Source Table` value. `ID` is Int64 (CSV-inferred) while the raw ids are
+# Int32, so the id key is cast to match.
+#
+# A few ids in the raw tables have no entry under their own `Source Table` (HiRID 1.1.1: 5
+# observation and 2 pharma ids). Their code falls back to the raw id, so they stay distinct
+# rather than all collapsing into one `UNK` code.
+#
+# The reference's `Variable Name` / `Unit` columns contain spaces, which dftly's `$name` shorthand
+# cannot express; the explicit `{column: ...}` form can, so `_table.cols` aliases them once.
 # See https://github.com/mmcdermott/dftly/issues/96.
 # ---------------------------------------------------------------------------
 
-raw_stage/pharma_records_parquet:
+raw_stage/pharma_records/parquet:
   _table:
     join:
-      reference_data/hirid_variable_reference: {left_on: pharmaid, right_on: ID, cols: [Variable Name, Unit]}
+      hirid_variable_reference:
+        left_on: [_ref_table, _ref_id]
+        right_on: [Source Table, ID]
+        cols: [Variable Name]
     cols:
-      variable_name: {column: Variable Name}
-      unit: {column: Unit}
+      _ref_table: "'Pharma'"
+      _ref_id: "$pharmaid::int64"
+      variable_name: { column: Variable Name }
+  # The dose unit is recorded on every pharma row (`doseunit`), so it is taken from there rather
+  # than from the reference table's `Unit`.
   medication:
-    code: 'f"MEDICATION//{$variable_name ?? ''UNK''}"'
-    time: '$givenat::?"%Y-%m-%d %H:%M:%S"'
+    code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}"'
+    time: $givenat
     numeric_value: $givendose
-    text_value: $unit
+    text_value: $doseunit
 
-raw_stage/observation_tables:
+raw_stage/observation_tables/parquet:
   _table:
     join:
-      reference_data/hirid_variable_reference: {left_on: variableid, right_on: ID, cols: [Variable Name, Unit]}
+      hirid_variable_reference:
+        left_on: [_ref_table, _ref_id]
+        right_on: [Source Table, ID]
+        cols: [Variable Name, Unit]
     cols:
-      variable_name: {column: Variable Name}
-      unit: {column: Unit}
+      _ref_table: "'Observation'"
+      _ref_id: "$variableid::int64"
+      variable_name: { column: Variable Name }
+      unit: { column: Unit }
+  # `stringvalue` is an empty string (not null) on almost every numeric row; only a real string
+  # is kept as the text value.
   observation:
-    code: 'f"OBSERVATION//{$variable_name ?? ''UNK''}//{$unit ?? ''UNK''}"'
-    time: '$datetime::?"%Y-%m-%d %H:%M:%S"'
+    code: 'f"OBSERVATION//{$variable_name ?? $variableid::str}//{$unit ?? ''UNK''}"'
+    time: $datetime
     numeric_value: $value
-    text_value: $stringvalue
+    text_value: '$stringvalue if $stringvalue != ""'

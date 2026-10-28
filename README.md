@@ -29,6 +29,42 @@ export DATASET_DOWNLOAD_USERNAME=... DATASET_DOWNLOAD_PASSWORD=...
 meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
 ```
 
+This downloads only the three release files the ETL reads (`reference_data.tar.gz`,
+`raw_stage/observation_tables_parquet.tar.gz`, `raw_stage/pharma_records_parquet.tar.gz`, ~7 GB),
+unpacks them, and runs the extraction.
+
+### Using an existing download
+
+If you already have the release on disk, point the ETL at it and skip the download:
+
+```bash
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR do_download=false input_dir=$HIRID_DIR
+```
+
+`$HIRID_DIR` must contain the **unpacked** files, laid out the way the download step leaves them:
+
+```
+$HIRID_DIR/
+├── general_table.csv                    # from reference_data.tar.gz
+├── hirid_variable_reference.csv         # from reference_data.tar.gz
+└── raw_stage/
+    ├── observation_tables/parquet/part-*.parquet
+    └── pharma_records/parquet/part-*.parquet
+```
+
+All three archives are required; the two `raw_stage` parquet archives alone are not enough, as
+patients, demographics and variable names come from `reference_data.tar.gz`. To unpack a manual
+download:
+
+```bash
+cd $HIRID_DIR
+tar -xzf reference_data.tar.gz
+(cd raw_stage && tar -xzf observation_tables_parquet.tar.gz && tar -xzf pharma_records_parquet.tar.gz)
+```
+
+Note that the download step only unpacks files it fetches itself: archives already present with a
+matching checksum are skipped and therefore *not* unpacked.
+
 ## Configuration
 
 **This package contains no ETL code.** The entire pipeline is one file,
@@ -37,41 +73,45 @@ meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
 
 Everything the old `pre_MEDS.py` did is now config:
 
-| Was | Now |
-| --- | --- |
-| `.tar.gz` extraction | `unarchive: auto` on the PhysioNet source |
-| `get_patient_link` — pseudo DOB | `_table.cols`: `date_of_birth: $_admitted - $age::years` |
-| `save_last_event` — death/discharge from last observation | `_table.join` with `cols: {datetime: max}` |
-| Variable-reference join | `_table.join` on `pharmaid`/`variableid` → `ID` |
+| Was                                                       | Now                                                      |
+| --------------------------------------------------------- | -------------------------------------------------------- |
+| `.tar.gz` extraction                                      | `unarchive: auto` on the PhysioNet source                |
+| `get_patient_link` — pseudo DOB                           | `_table.cols`: `date_of_birth: $_admitted - $age::years` |
+| `save_last_event` — death/discharge from last observation | `_table.join` with `cols: {datetime: max}`               |
+| Variable-reference join                                   | `_table.join` on (`Source Table`, `ID`)                  |
 
-The reference table's `Variable Name` / `Unit` columns contain spaces, which dftly's `$name`
-shorthand cannot express; `_table.cols` aliases them once using the explicit `{column: ...}` form
-(see [dftly#96](https://github.com/mmcdermott/dftly/issues/96)).
+The modelling choices behind the config (codes, null handling, deduplication, what counts as
+death/discharge) and the numbers from a full run are documented in
+[`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md).
 
+## Output
 
-## MEDS-transforms settings
+| Code                                   | Time                                                   | `numeric_value` | `text_value`                   |
+| -------------------------------------- | ------------------------------------------------------ | --------------- | ------------------------------ |
+| `HOSPITAL_ADMISSION`                   | `admissiontime`                                        |                 |                                |
+| `SEX//{sex}`                           | static                                                 |                 |                                |
+| `MEDS_BIRTH`                           | `admissiontime - age` (age is binned)                  |                 |                                |
+| `HOSPITAL_DISCHARGE`                   | last observation                                       |                 |                                |
+| `MEDS_DEATH`                           | last observation, if `discharge_status` is not `alive` |                 |                                |
+| `OBSERVATION//{Variable Name}//{Unit}` | `datetime`                                             | `value`         | `stringvalue` (non-empty only) |
+| `MEDICATION//{Variable Name}`          | `givenat`                                              | `givendose`     | `doseunit`                     |
 
-If you want to convert a large dataset, you can use parallelization with MEDS-transforms
-(the MEDS-transformation step that takes the longest).
+## Resources and parallelism
 
-Using local parallelization with the `hydra-joblib-launcher` package, you can set the number of workers:
-
-```
-pip install hydra-joblib-launcher --upgrade
-```
-
-Then, you can set the number of workers as environment variable:
-
-```bash
-export N_WORKERS=8
-```
-
-Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many
-subjects you have in your dataset:
+A full run reads ~777M observation rows. Stages can run in parallel through a MEDS-transforms
+stage-runner file:
 
 ```bash
-export N_SUBJECTS_PER_SHARD=100000
+pip install "HIRID_MEDS[local_parallelism]"
+cat > runner.yaml <<'YAML'
+parallelize:
+  n_workers: 8
+  launcher: joblib
+YAML
+meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR stage_runner_fp=runner.yaml
 ```
+
+`etl.n_subjects_per_shard` in the config (default 1000) controls the shard size.
 
 ## Citation
 
