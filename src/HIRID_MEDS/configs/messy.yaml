@@ -60,11 +60,10 @@ general_table:
   _table:
     join:
       raw_stage/observation_tables/parquet:
-        {
-          left_on: _obs_patientid,
-          right_on: patientid,
-          cols: { datetime: max },
-        }
+        left_on: _obs_patientid
+        right_on: patientid
+        cols:
+          datetime: max
     cols:
       _obs_patientid: "$patientid::int32"
       _admitted: '$admissiontime::?"%Y-%m-%d %H:%M:%S"'

@@ -11,7 +11,8 @@
 ![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
 [![DOI](https://zenodo.org/badge/936180918.svg)](https://doi.org/10.5281/zenodo.17370178)
 
-Warning: This ETL currently needs a lot of resources to run.
+Warning: This ETL needs a lot of memory unless polars' streaming engine is enabled; see
+[Resources and parallelism](#resources-and-parallelism).
 
 This repository contains the ETL (Extract, Transform, Load) code to convert the HIRID dataset
 into the [MEDS](https://medical-event-data-standard.github.io/) ecosystem.
@@ -25,6 +26,7 @@ source: https://hirid.intensivecare.ai/
 ```bash
 pip install HIRID_MEDS
 export DATASET_DOWNLOAD_USERNAME=... DATASET_DOWNLOAD_PASSWORD=...
+export POLARS_ENGINE_AFFINITY=streaming  # see "Resources and parallelism"
 
 meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
 ```
@@ -98,8 +100,18 @@ death/discharge) and the numbers from a full run are documented in
 
 ## Resources and parallelism
 
-A full run reads ~777M observation rows. Stages can run in parallel through a MEDS-transforms
-stage-runner file:
+A full run reads ~777M observation rows. Run it with polars' streaming engine:
+
+```bash
+export POLARS_ENGINE_AFFINITY=streaming
+```
+
+With it, a full run takes ~13 minutes and peaks at ~9.5 GB RSS (single worker, 10-core / 24 GB
+laptop). Without it, `split_and_shard_subjects` is killed for running out of memory on the same
+machine: MEDS-Extract applies each table's variable-reference join before collecting subject ids,
+so the in-memory engine materializes the join over every observation row.
+
+Stages can also run in parallel through a MEDS-transforms stage-runner file:
 
 ```bash
 pip install "HIRID_MEDS[local_parallelism]"
