@@ -11,6 +11,13 @@
 ![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
 [![DOI](https://zenodo.org/badge/936180918.svg)](https://doi.org/10.5281/zenodo.17370178)
 
+> [!WARNING]
+> **Extracts made with HIRID_MEDS 0.0.1–0.0.4 contain duplicated, mislabeled and missing events.**
+> Those releases joined the variable reference on `ID` alone. On HiRID 1.1.1 that adds a second,
+> drug-named event to ~24M observation rows (3.1%), mislabels ~123k rows, and drops ~79k. Please
+> re-extract with this version. Details:
+> [#10](https://github.com/rvandewater/HIRID_MEDS/issues/10).
+
 Warning: This ETL needs a lot of memory unless polars' streaming engine is enabled; see
 [Resources and parallelism](#resources-and-parallelism).
 

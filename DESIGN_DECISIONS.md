@@ -29,6 +29,25 @@ derivatives are not used. The `sources.include` list stages exactly these three 
 archive root), so with `unarchive: auto` the tables land at the input root and are addressed as
 `general_table` / `hirid_variable_reference` (not `reference_data/…`).
 
+## Impact on extracts from releases 0.0.1–0.0.4
+
+Every released version (`pre_MEDS.py`) inner-joins the variable reference on `ID` alone (fixed by
+D1). Applying those join semantics to the raw HiRID 1.1.1 tables gives:
+
+| Effect     | Table       |          Raw rows | Ids | Result in the old output                                           |
+| ---------- | ----------- | ----------------: | --: | ------------------------------------------------------------------ |
+| duplicated | observation | 23,953,744 (3.1%) |   1 | correct event **plus** `OBSERVATION//<drug name>//UNK`             |
+| duplicated | pharma      |                12 |   1 | extra `MEDICATION//<observation name>`                             |
+| mislabeled | observation |           112,977 |   4 | `OBSERVATION//<drug name>//UNK`                                    |
+| mislabeled | pharma      |            10,074 |   2 | `MEDICATION//<observation name>`, observation unit as `text_value` |
+| dropped    | observation |            79,105 |   1 | no event (inner join)                                              |
+
+MEDS-Transforms 0.2.4 fills null code components with `UNK` and only null-filters a leading column
+component, so the extra rows did become events. In addition, correctly matched medication events
+have no unit (D4), and most observation events carry `text_value = ""` (D5). Anyone with an older
+extract should re-run; tracked in
+[#10](https://github.com/rvandewater/HIRID_MEDS/issues/10).
+
 ## Decisions made in this PR
 
 ### D1. Variable-reference join is keyed on (`Source Table`, `ID`) — *bug fix*
