@@ -8,7 +8,7 @@
 [![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/mmcdermott/ETL_MEDS_Template#license)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/ETL_MEDS_Template/pulls)
 [![contributors](https://img.shields.io/github/contributors/mmcdermott/ETL_MEDS_Template.svg)](https://github.com/mmcdermott/ETL_MEDS_Template/graphs/contributors)
-![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
+![Static Badge](https://img.shields.io/badge/MEDS-0.4.1-blue)
 [![DOI](https://zenodo.org/badge/936180918.svg)](https://doi.org/10.5281/zenodo.17370178)
 
 > [!WARNING]
@@ -17,6 +17,7 @@
 > drug-named event to ~24M observation rows (3.1%), mislabels ~123k rows, and drops ~79k. Please
 > re-extract with this version. Details:
 > [#10](https://github.com/rvandewater/HIRID_MEDS/issues/10).
+> **This is fixed in 0.1.0 with the update to MEDS-Extract 0.7**
 
 Warning: This ETL needs a lot of memory unless polars' streaming engine is enabled; see
 [Resources and parallelism](#resources-and-parallelism).
@@ -136,8 +137,48 @@ meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR stage_runner_fp=runner.yaml
 
 If you use this dataset, please cite the original publication below and the ETL (see cite this repository):
 
+```bibtex
+@article{PhysioNet-hirid-1.1.1,
+  author = {Faltys, Martin and Zimmermann, Marc and Lyu, Xinrui and Hüser, Matthias and Hyland, Stephanie and Rätsch, Gunnar and Merz, Tobias},
+  title = {{HiRID, a high time-resolution ICU dataset}},
+  journal = {{PhysioNet}},
+  year = {2021},
+  month = feb,
+  note = {Version 1.1.1},
+  doi = {10.13026/nkwc-js72},
+  url = {https://doi.org/10.13026/nkwc-js72}
+}
 ```
-Faltys, M., Zimmermann, M., Lyu, X., Hüser, M., Hyland, S., Rätsch, G., & Merz, T. (2021). HiRID, a high time-resolution ICU dataset (version 1.1.1). PhysioNet. https://doi.org/10.13026/nkwc-js72.
+Article:
+```bibtex
+@ARTICLE{Hyland2020-vq,
+  title     = "Early prediction of circulatory failure in the intensive care
+               unit using machine learning",
+  author    = "Hyland, Stephanie L and Faltys, Martin and H{\"u}ser, Matthias
+               and Lyu, Xinrui and Gumbsch, Thomas and Esteban, Crist{\'o}bal
+               and Bock, Christian and Horn, Max and Moor, Michael and Rieck,
+               Bastian and Zimmermann, Marc and Bodenham, Dean and Borgwardt,
+               Karsten and R{\"a}tsch, Gunnar and Merz, Tobias M",
+  journal   = "Nat. Med.",
+  publisher = "Springer Science and Business Media LLC",
+  volume    =  26,
+  number    =  3,
+  pages     = "364--373",
+  month     =  mar,
+  year      =  2020,
+  language  = "en"
+}
+```
+This ETL:
+```bibtex
+@software{van_de_Water_HIRID_MEDS_ETL_2025,
+author = {van de Water, Robin Philippus},
+doi = {10.5281/zenodo.17370179 },
+license = {MIT},
+month = oct,
+title = {{HIRID MEDS ETL}},
+url = {https://github.com/rvandewater/HIRID_MEDS},
+year = {2025}
+}
+```
 
-Hyland, S.L., Faltys, M., Hüser, M. et al. Early prediction of circulatory failure in the intensive care unit using machine learning. Nat Med 26, 364–373 (2020). https://doi.org/10.1038/s41591-020-0789-4
-```
