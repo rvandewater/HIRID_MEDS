@@ -43,6 +43,7 @@ export DATASET_DOWNLOAD_PASSWORD=$PHYSIONET_PASSWORD
 export POLARS_ENGINE_AFFINITY=streaming  # see "Resources" below
 meds-extract-download spec=HIRID output_dir=$RAW_INPUT_DIR
 meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR do_download=false input_dir=$RAW_INPUT_DIR
+hirid-meds-describe-codes $MEDS_OUTPUT_DIR
 ```
 
 When you run this, the program will:
@@ -53,6 +54,9 @@ When you run this, the program will:
 2. Build the MEDS cohort from the unpacked files and write it to `$MEDS_OUTPUT_DIR` (`data/` and
     `metadata/`). All transformations are declared in
     [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml).
+3. Fill in the descriptions of the four literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, …) in
+    `metadata/codes.parquet`, which MEDS-Extract cannot describe (see
+    [Code metadata](#code-metadata)). The extraction is complete without this step.
 
 `meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR` without `do_download=false` does both steps
 in one command.
@@ -106,7 +110,8 @@ Run `meds-extract-run --help` for every option.
 
 The whole ETL is one MESSY (MEDS-Extract Specification Syntax YAML) file,
 [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml). The package contains no
-ETL code. The file declares:
+ETL code; its only code is the optional `hirid-meds-describe-codes` step (see
+[Code metadata](#code-metadata)). The file declares:
 
 - **`sources:`**: where the raw data lives (the PhysioNet release, restricted to the three archives
     above, unpacked after download).
@@ -161,6 +166,72 @@ the full-run validation.
 - **Unmapped columns.** Validity and status columns (`status`, `type`, `recordstatus`, `typeid`, …)
     are not extracted ([#5](https://github.com/rvandewater/HIRID_MEDS/issues/5)).
 
+## Code metadata
+
+`metadata/codes.parquet` carries `code`, `description` and `code_template`.
+Releases up to 0.1.0 wrote no metadata (0.1.0 writes only `code`; 0.0.x wrote an empty string as
+every description), which gives tooling that maps codes across datasets or builds features from
+descriptions nothing to work with. The descriptions now come from the release's own variable
+dictionary, joined at ETL time. The ETL adds no vocabulary parents (no `parent_codes`); suMEDS adds
+LOINC parents from the packaged rules file (see
+[Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
+
+| Codes                                                      | Route                                                                                                                  | Source                                                                                                                                           |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OBSERVATION//{Variable Name}//{Unit}`                     | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
+| `MEDICATION//{Variable Name}`                              | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
+| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>` | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
+| `SEX//{sex}`                                               | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
+
+The dictionary is joined rather than evaluated per event because `observation_tables` has ~777M
+rows: an external `_metadata` table is read once per shard, while a `_self` value is carried on
+every event row. The fallback `_self` blocks are null on all but the fallback rows; on a 5.7M-event
+synthetic build they changed neither peak memory nor run time measurably.
+
+`MEDICATION` codes get no vocabulary parent: the drug names are Swiss products, and no public
+HiRID drug mapping to RxNorm or ATC was found (WeavEHR maps no pharma ids; the circEWS pharma
+reference lists German generic names only).
+
+`tests/test_code_metadata.py` checks that every component-coded event is described and that no
+block adds parent codes; `tests/test_etl.py` checks the extracted `codes.parquet` against the
+fixture and validates it against `meds.CodeMetadataSchema`.
+
+**Literal codes** (`HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
+components for a `_metadata` block to join on, and the pre-existing `metadata/codes.parquet` that
+MEDS-Extract documents for this case is not read by its standard pipeline (`extract_code_metadata`
+reads the output of its prior metadata stage, `split_and_shard_subjects`, which writes no
+`codes.parquet`). `hirid-meds-describe-codes $MEDS_OUTPUT_DIR` fills them in after the run from
+[`src/HIRID_MEDS/metadata/static_code_descriptions.csv`](src/HIRID_MEDS/metadata/static_code_descriptions.csv),
+which records the source of every row (`hirid-docs`: the HiRID data structure docs; this ETL's
+config). It only writes descriptions that are null, never adds codes, is idempotent, and validates
+the file against `meds.CodeMetadataSchema` before replacing it. Without it, these four codes stay
+undescribed.
+
+## Enriching code metadata with suMEDS
+
+Vocabulary work (LOINC tables, ontology checks) lives in
+[suMEDS](https://github.com/rvandewater/SumMEDS) and its versioned ontology data (sumeds-ontologies,
+pinned release), which maintain one copy for all MEDS ETLs. This package ships a rules file for it,
+[`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml) (package data, format
+`sumeds-rules/0.1`). After the ETL, run:
+
+```bash
+uvx --from "git+https://github.com/rvandewater/SumMEDS" suMEDS-enrich \
+    $MEDS_OUTPUT_DIR/metadata/codes.parquet -o codes-enriched.parquet \
+    --rules src/HIRID_MEDS/sumeds_rules.yaml
+```
+
+Two crosswalk rules look up the variable name (`OBSERVATION//{Variable Name}//…`) or the raw id
+(`OBSERVATION//{variableid}//UNK`) in the `hirid/observation_loinc` crosswalk of suMEDS's versioned
+ontology data: the 82 observation variable ids whose public HiRID variable name (HiRID variable
+sheet; HIRID-ICU-Benchmark `varref.tsv`, MIT) is exactly the long common name of one LOINC term.
+Each match is validated against the LOINC pack there and gets `parent_codes = ["LOINC//<code>"]`,
+the LOINC long common name as description where the code had none, and
+`vocabulary_id`/`concept_code`. On HiRID 1.1.1, 67 of the 123 observation codes get a LOINC parent. The ETL alone does not emit these parents. HiRID has no
+same-dataset hierarchy (no code is a coarser version of another), so the file has no hierarchy
+rules. `tests/test_sumeds_rules.py` checks that the file is well formed and that every rule matches
+the code layouts of `configs/messy.yaml`.
+
 ## Testing
 
 `tests/test_etl.py` builds a small hand-written fixture with the release's layout and dtypes, runs
@@ -183,6 +254,7 @@ synthetic ETL locally:
 uv pip install "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
 uv run MESSY-synth ./src/HIRID_MEDS/configs/messy.yaml -o raw_synthetic/ --explain
 uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_synthetic do_download=false
+uv run hirid-meds-describe-codes ./HIRID_meds_synth
 ```
 
 ## Citation

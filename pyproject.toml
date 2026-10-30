@@ -18,9 +18,13 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-# Pure-config ETL: the only runtime dependency is MEDS-Extract itself, which supplies both
-# CLIs (`meds-extract-download`, `meds-extract-run`) and every extraction stage.
-dependencies = ["MEDS-extract[download]>=0.7.1,<0.8"]
+# Pure-config ETL: MEDS-Extract supplies both CLIs (`meds-extract-download`, `meds-extract-run`)
+# and every extraction stage. The others are for `hirid-meds-describe-codes`, which fills in the
+# descriptions of literal codes after the run (all three are MEDS-Extract dependencies too).
+dependencies = ["MEDS-extract[download]>=0.7.1,<0.8", "meds", "polars", "pyarrow"]
+
+[project.scripts]
+hirid-meds-describe-codes = "HIRID_MEDS.code_descriptions:main"
 
 [project.optional-dependencies]
 local_parallelism = ["hydra-joblib-launcher"]
@@ -44,7 +48,8 @@ where = ["src"]
 include = ["HIRID_MEDS*"]
 
 [tool.setuptools.package-data]
-HIRID_MEDS = ["configs/*.yaml"]
+HIRID_MEDS = ["configs/*.yaml", "metadata/*.csv", "sumeds_rules.yaml"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "src"]
+addopts = "--doctest-modules"
