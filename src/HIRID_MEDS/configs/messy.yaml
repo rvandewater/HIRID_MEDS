@@ -39,6 +39,23 @@ _defaults:
   subject_id: $patientid
 
 # ---------------------------------------------------------------------------
+# Code metadata (`metadata/codes.parquet`; see the README section "Code metadata").
+#
+# MEDS-Extract attaches a `_metadata` block by joining on the code's components. Two forms are used:
+#
+#   - an external block on `hirid_variable_reference`, the release's own variable dictionary,
+#     joined on the raw id (a partial match on one component, so every code built from that id
+#     gets it). The dictionary is vocabulary-sized and read once per shard, which matters for the
+#     ~777M observation rows. Its `ID` is unique only within a `Source Table`, so every output
+#     is gated on the table: rows of the other table produce all-null outputs and are dropped.
+#   - a `_self` block, evaluated on the event's own rows. It is used for `SEX//...` and for the
+#     fallback codes of ids without a reference entry, where it is null on every other row.
+#
+# Literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no block can
+# describe them.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # `general_table` (from `reference_data.tar.gz`, which unpacks flat into the input root) is the
 # patient/admission table. Everything the old `get_patient_link` + `save_last_event` did in polars
 # is expressed here:
@@ -76,6 +93,11 @@ general_table:
   sex:
     code: 'f"SEX//{$sex ?? ''UNK''}"'
     time: null
+    _metadata:
+      _self:
+        description: >-
+          f"Sex: {$sex ?? 'UNK'} (HiRID general_table.sex, documented as M or F; UNK when
+          missing)"
   birth:
     code: MEDS_BIRTH
     time: $date_of_birth
@@ -123,6 +145,16 @@ raw_stage/pharma_records/parquet:
     time: $givenat
     numeric_value: $givendose
     text_value: $doseunit
+    _metadata:
+      hirid_variable_reference:
+        pharmaid: $ID
+        description: >-
+          f"{$`Variable Name`} (HiRID pharma_records, drug or fluid given; name of the pharmaid in
+          hirid_variable_reference)" if $`Source Table` == "Pharma"
+      _self:
+        description: >-
+          f"HiRID pharmaid {$pharmaid} without a Pharma entry in hirid_variable_reference (name
+          unknown)" if ($variable_name ?? "") == ""
 
 raw_stage/observation_tables/parquet:
   _table:
@@ -143,3 +175,89 @@ raw_stage/observation_tables/parquet:
     time: $datetime
     numeric_value: $value
     text_value: '$stringvalue if $stringvalue != ""'
+    _metadata:
+      hirid_variable_reference:
+        variableid: $ID
+        description: >-
+          (f"{$`Variable Name`} [{$Unit ?? 'no unit'}]; {$`Additional information`} (HiRID
+          observation_tables, name and unit of the variableid in hirid_variable_reference)" if
+          $`Additional information` != "" else f"{$`Variable Name`} [{$Unit ?? 'no unit'}] (HiRID
+          observation_tables, name and unit of the variableid in hirid_variable_reference)") if
+          $`Source Table` == "Observation"
+        # LOINC parents for the variables in `metadata/observation_loinc.csv`, which records the
+        # source of every row; tests/test_code_metadata.py checks that this chain encodes exactly
+        # that table. Ids that share a LOINC code share a line.
+        parent_codes: >-
+          (
+          "LOINC/8867-4" if $ID::str == "200" else
+          "LOINC/9279-1" if /^(300|310|5685)$/ in $ID::str else
+          "LOINC/8328-7" if $ID::str == "400" else
+          "LOINC/75994-4" if $ID::str == "800" else
+          "LOINC/8332-9" if $ID::str == "7100" else
+          "LOINC/29463-7" if $ID::str == "10000400" else
+          "LOINC/26515-7" if $ID::str == "20000110" else
+          "LOINC/2703-7" if $ID::str == "20000200" else
+          "LOINC/2744-1" if $ID::str == "20000300" else
+          "LOINC/2947-0" if /^(20000400|24000519|24000658|24000835|24000866)$/ in $ID::str else
+          "LOINC/6298-4" if /^(20000500|24000520|24000833|24000867)$/ in $ID::str else
+          "LOINC/59826-8" if $ID::str == "20000600" else
+          "LOINC/26464-8" if $ID::str == "20000700" else
+          "LOINC/2708-6" if $ID::str == "20000800" else
+          "LOINC/718-7" if /^(20000900|24000836)$/ in $ID::str else
+          "LOINC/2019-8" if $ID::str == "20001200" else
+          "LOINC/1925-7" if $ID::str == "20001300" else
+          "LOINC/1988-5" if $ID::str == "20002200" else
+          "LOINC/24519-1" if $ID::str == "20002500" else
+          "LOINC/1742-6" if $ID::str == "20002600" else
+          "LOINC/1783-0" if $ID::str == "20002700" else
+          "LOINC/2955-3" if $ID::str == "20003200" else
+          "LOINC/72926-9" if $ID::str == "20004100" else
+          "LOINC/1960-4" if $ID::str == "20004200" else
+          "LOINC/14631-6" if $ID::str == "20004300" else
+          "LOINC/3173-2" if $ID::str == "20004410" else
+          "LOINC/1996-8" if $ID::str == "20005100" else
+          "LOINC/14749-6" if /^(20005110|24000523|24000585)$/ in $ID::str else
+          "LOINC/28539-5" if $ID::str == "24000160" else
+          "LOINC/24335-2" if $ID::str == "24000210" else
+          "LOINC/13969-1" if $ID::str == "24000220" else
+          "LOINC/2593-2" if $ID::str == "24000230" else
+          "LOINC/1920-8" if $ID::str == "24000330" else
+          "LOINC/2324-2" if $ID::str == "24000370" else
+          "LOINC/14744-7" if $ID::str == "24000400" else
+          "LOINC/1798-8" if $ID::str == "24000427" else
+          "LOINC/2069-3" if /^(24000439|24000521)$/ in $ID::str else
+          "LOINC/26474-7" if $ID::str == "24000480" else
+          "LOINC/2519-7" if /^(24000485|24000732)$/ in $ID::str else
+          "LOINC/1994-3" if $ID::str == "24000522" else
+          "LOINC/30242-2" if $ID::str == "24000524" else
+          "LOINC/2030-5" if $ID::str == "24000526" else
+          "LOINC/3255-7" if $ID::str == "24000536" else
+          "LOINC/6598-7" if $ID::str == "24000538" else
+          "LOINC/30313-1" if $ID::str == "24000548" else
+          "LOINC/2615-3" if $ID::str == "24000549" else
+          "LOINC/3198-9" if $ID::str == "24000552" else
+          "LOINC/3040-3" if $ID::str == "24000555" else
+          "LOINC/1968-7" if $ID::str == "24000560" else
+          "LOINC/2520-5" if $ID::str == "24000564" else
+          "LOINC/34714-6" if $ID::str == "24000567" else
+          "LOINC/1839-0" if $ID::str == "24000568" else
+          "LOINC/33762-6" if $ID::str == "24000569" else
+          "LOINC/33959-8" if $ID::str == "24000570" else
+          "LOINC/14683-7" if /^(24000572|24000573)$/ in $ID::str else
+          "LOINC/1795-4" if $ID::str == "24000587" else
+          "LOINC/1751-7" if $ID::str == "24000605" else
+          "LOINC/2747-4" if $ID::str == "24000608" else
+          "LOINC/3193-0" if $ID::str == "24000637" else
+          "LOINC/3016-3" if $ID::str == "24000664" else
+          "LOINC/14675-3" if $ID::str == "24000665" else
+          "LOINC/3289-6" if $ID::str == "24000666" else
+          "LOINC/3218-5" if $ID::str == "24000667" else
+          "LOINC/24373-3" if $ID::str == "24000678" else
+          "LOINC/2748-2" if $ID::str == "24000741" else
+          "LOINC/22700-9" if $ID::str == "24000754" else
+          "LOINC/67151-1" if $ID::str == "24000806"
+          ) if $`Source Table` == "Observation"
+      _self:
+        description: >-
+          f"HiRID observation variableid {$variableid} without an Observation entry in
+          hirid_variable_reference (name and unit unknown)" if ($variable_name ?? "") == ""

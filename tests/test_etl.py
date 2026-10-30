@@ -3,7 +3,8 @@
 The fixture mirrors the real HiRID 1.1.1 layout and dtypes (raw_stage parquet with Int32 ids and
 native timestamps; reference_data CSVs at the input root), because that is where this config has
 broken before: join keys of mismatched dtypes, and an `ID` that is listed under both `Source
-Table`s. Every value in it is made up.
+Table`s. Every value in it is made up, except that observation id 20000300 is one of the ids
+`metadata/observation_loinc.csv` gives a LOINC parent.
 """
 
 import os
@@ -13,7 +14,9 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
+from meds import CodeMetadataSchema
 from MEDS_extract.config import MessyConfig
 
 T0 = datetime(2150, 1, 1, 8, 0)
@@ -36,11 +39,17 @@ def _write_fixture(root: Path) -> None:
     # ID 100 is both an observation variable and a drug, as one id is in the real reference.
     pl.DataFrame(
         {
-            "Source Table": ["Observation", "Observation", "Pharma", "Pharma"],
-            "ID": [100, 200, 100, 300],
-            "Variable Name": ["Heart rate", "GCS", "Drug A", "Drug B"],
-            "Unit": ["/min", None, None, None],
-            "Additional information": [None, None, None, None],
+            "Source Table": [
+                "Observation",
+                "Observation",
+                "Observation",
+                "Pharma",
+                "Pharma",
+            ],
+            "ID": [100, 200, 20000300, 100, 300],
+            "Variable Name": ["Heart rate", "GCS", "Lab A", "Drug A", "Drug B"],
+            "Unit": ["/min", None, "mmol/l", None, None],
+            "Additional information": [None, None, "from a drain", None, None],
         }
     ).write_csv(root / "hirid_variable_reference.csv")
 
@@ -55,12 +64,13 @@ def _write_fixture(root: Path) -> None:
                 T0.replace(hour=10),
                 T0,
                 T0.replace(hour=12),
+                T0.replace(hour=11),
             ],
-            "patientid": [1, 1, 1, 1, 2, 2],
-            "stringvalue": ["", "", "", "abnormal", "", ""],
-            "value": [80.0, 85.0, 15.0, None, 90.0, 95.0],
+            "patientid": [1, 1, 1, 1, 2, 2, 2],
+            "stringvalue": ["", "", "", "abnormal", "", "", ""],
+            "value": [80.0, 85.0, 15.0, None, 90.0, 95.0, 7.4],
             # 999 has no reference entry.
-            "variableid": [100, 100, 200, 999, 100, 100],
+            "variableid": [100, 100, 200, 999, 100, 100, 20000300],
         },
         schema_overrides={
             "patientid": pl.Int32,
@@ -92,7 +102,7 @@ def _write_fixture(root: Path) -> None:
 
 
 @pytest.fixture(scope="module")
-def meds(tmp_path_factory) -> pl.DataFrame:
+def meds_dir(tmp_path_factory) -> Path:
     tmp = tmp_path_factory.mktemp("hirid")
     raw, out = tmp / "raw", tmp / "out"
     raw.mkdir()
@@ -107,7 +117,12 @@ def meds(tmp_path_factory) -> pl.DataFrame:
     ]  # fmt: skip
     result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr[-5000:]
-    return pl.read_parquet(out / "data" / "**" / "*.parquet")
+    return out
+
+
+@pytest.fixture(scope="module")
+def meds(meds_dir: Path) -> pl.DataFrame:
+    return pl.read_parquet(meds_dir / "data" / "**" / "*.parquet")
 
 
 def test_registered_spec_loads():
@@ -161,3 +176,35 @@ def test_patient_events(meds: pl.DataFrame):
         "SEX//M",
         "SEX//F",
     }
+
+
+def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
+    table = pq.read_table(meds_dir / "metadata" / "codes.parquet")
+    CodeMetadataSchema.validate(table)
+    by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
+    assert set(meds["code"]) <= set(by_code)
+    # Literal codes have no components to attach metadata to.
+    literal = {"HOSPITAL_ADMISSION", "HOSPITAL_DISCHARGE", "MEDS_BIRTH", "MEDS_DEATH"}
+    assert {c for c, r in by_code.items() if r["description"] is None} == literal
+
+    # Id 100 is in both tables; each code is described from its own table's row only.
+    hr = by_code["OBSERVATION//Heart rate///min"]
+    assert hr["description"].startswith("Heart rate [/min] (HiRID observation_tables")
+    assert "Drug" not in hr["description"] and hr["parent_codes"] is None
+    drug = by_code["MEDICATION//Drug A"]
+    assert drug["description"].startswith("Drug A (HiRID pharma_records")
+    assert "Heart rate" not in drug["description"]
+    assert by_code["OBSERVATION//GCS//UNK"]["description"].startswith("GCS [no unit]")
+
+    # LOINC parent by variable id; the reference's additional information is kept.
+    lab = by_code["OBSERVATION//Lab A//mmol/l"]
+    assert lab["parent_codes"] == ["LOINC/2744-1"]
+    assert lab["description"].startswith("Lab A [mmol/l]; from a drain (HiRID")
+
+    # An id without a reference entry is described by the fallback `_self` block.
+    assert by_code["OBSERVATION//999//UNK"]["description"].startswith(
+        "HiRID observation variableid 999 without an Observation entry"
+    )
+    assert by_code["SEX//F"]["description"].startswith(
+        "Sex: F (HiRID general_table.sex"
+    )
