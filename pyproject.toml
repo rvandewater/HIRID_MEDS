@@ -48,7 +48,7 @@ where = ["src"]
 include = ["HIRID_MEDS*"]
 
 [tool.setuptools.package-data]
-HIRID_MEDS = ["configs/*.yaml", "metadata/*.csv"]
+HIRID_MEDS = ["configs/*.yaml", "metadata/*.csv", "sumeds_rules.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src"]

@@ -168,51 +168,33 @@ the full-run validation.
 
 ## Code metadata
 
-`metadata/codes.parquet` carries `code`, `description`, `parent_codes` and `code_template`.
+`metadata/codes.parquet` carries `code`, `description` and `code_template`.
 Releases up to 0.1.0 wrote no metadata (0.1.0 writes only `code`; 0.0.x wrote an empty string as
 every description), which gives tooling that maps codes across datasets or builds features from
 descriptions nothing to work with. The descriptions now come from the release's own variable
-dictionary, joined at ETL time, and lab observations get LOINC parent codes:
+dictionary, joined at ETL time. The ETL adds no vocabulary parents (no `parent_codes`); suMEDS adds
+LOINC parents from the packaged rules file (see
+[Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-| Codes                                                      | Route                                                                                                                        | Source                                                                                                                                           |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OBSERVATION//{Variable Name}//{Unit}`                     | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)                | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
-| `OBSERVATION//…` LOINC parents                             | `parent_codes` in the same block: a chain keyed on `variableid` that encodes `src/HIRID_MEDS/metadata/observation_loinc.csv` | per row in the table's `source` column (below)                                                                                                   |
-| `MEDICATION//{Variable Name}`                              | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                       | `Variable Name` of the reference, read at ETL time                                                                                               |
-| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>` | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`)       | the raw id                                                                                                                                       |
-| `SEX//{sex}`                                               | `_metadata: _self:` template                                                                                                 | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
+| Codes                                                      | Route                                                                                                                  | Source                                                                                                                                           |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OBSERVATION//{Variable Name}//{Unit}`                     | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
+| `MEDICATION//{Variable Name}`                              | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
+| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>` | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
+| `SEX//{sex}`                                               | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
 
 The dictionary is joined rather than evaluated per event because `observation_tables` has ~777M
 rows: an external `_metadata` table is read once per shard, while a `_self` value is carried on
 every event row. The fallback `_self` blocks are null on all but the fallback rows; on a 5.7M-event
 synthetic build they changed neither peak memory nor run time measurably.
 
-**LOINC parents.** HiRID's variable reference names most of its lab variables by their LOINC long
-common name. `observation_loinc.csv` lists the 82 observation variable ids whose name matches
-exactly one valid, standard LOINC 2.80 term of class Lab Test or Clinical Observation, and the
-config gives their codes `parent_codes: ["LOINC/<code>"]`: 74 lab variables (`match = loinc_name`,
-61 LOINC codes) and 8 vital-sign and body-weight variables whose plain name happens to equal the
-LOINC name (`match = inferred_name_match`, 6 codes, e.g. `LOINC/8867-4` for heart rate). The names
-were taken from two public copies of the variable list, which agree on all 82 ids: the raw-variable
-spreadsheet linked from the [HiRID documentation](https://hirid.intensivecare.ai/data-details)
-(`hirid-varsheet` in the `source` column; it states no license, so nothing from it is copied) and
-`preprocessing/resources/varref.tsv` of
-[ratschlab/HIRID-ICU-Benchmark](https://github.com/ratschlab/HIRID-ICU-Benchmark)
-(`hirid-benchmark`, commit `bee7700`, MIT). Codes were resolved in LOINC 2.80 (OHDSI Athena release
-v5.0 27-FEB-26) and cross-checked with the [NLM Clinical Table Search
-Service](https://clinicaltables.nlm.nih.gov/). Only LOINC codes are shipped, no LOINC text. Checked
-against HiRID 1.1.1 with aggregate-only scripts: its own reference resolves the same 82 ids to the
-same codes and no other observation name resolves, and in its raw data the 143 referenced
-observation ids form 118 named codes, 67 of which get a LOINC parent. Ids that share a code always
-share its LOINC code. The remaining variables (most vital signs, ventilator settings, scores, and
-lab names that are not an exact LOINC term) have no parent. `MEDICATION` codes have none either: the
-drug names are Swiss products, and no public HiRID drug mapping to RxNorm or ATC was found (WeavEHR
-maps no pharma ids; the circEWS pharma reference lists German generic names only).
+`MEDICATION` codes get no vocabulary parent: the drug names are Swiss products, and no public
+HiRID drug mapping to RxNorm or ATC was found (WeavEHR maps no pharma ids; the circEWS pharma
+reference lists German generic names only).
 
-`tests/test_code_metadata.py` checks that the table is complete and sourced, that the config's
-chain encodes exactly the table, and that every component-coded event is described;
-`tests/test_etl.py` checks the extracted `codes.parquet` against the fixture and validates it
-against `meds.CodeMetadataSchema`.
+`tests/test_code_metadata.py` checks that every component-coded event is described and that no
+block adds parent codes; `tests/test_etl.py` checks the extracted `codes.parquet` against the
+fixture and validates it against `meds.CodeMetadataSchema`.
 
 **Literal codes** (`HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
 components for a `_metadata` block to join on, and the pre-existing `metadata/codes.parquet` that
@@ -224,6 +206,31 @@ which records the source of every row (`hirid-docs`: the HiRID data structure do
 config). It only writes descriptions that are null, never adds codes, is idempotent, and validates
 the file against `meds.CodeMetadataSchema` before replacing it. Without it, these four codes stay
 undescribed.
+
+## Enriching code metadata with suMEDS
+
+Vocabulary work (LOINC tables, ontology checks) lives in
+[suMEDS](https://github.com/rvandewater/SumMEDS) and its versioned ontology data (sumeds-ontologies,
+pinned release), which maintain one copy for all MEDS ETLs. This package ships a rules file for it,
+[`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml) (package data, format
+`sumeds-rules/0.1`). After the ETL, run:
+
+```bash
+uvx --from "git+https://github.com/rvandewater/SumMEDS" suMEDS-enrich \
+    $MEDS_OUTPUT_DIR/metadata/codes.parquet -o codes-enriched.parquet \
+    --rules src/HIRID_MEDS/sumeds_rules.yaml
+```
+
+Two crosswalk rules look up the variable name (`OBSERVATION//{Variable Name}//…`) or the raw id
+(`OBSERVATION//{variableid}//UNK`) in the `hirid/observation_loinc` crosswalk of suMEDS's versioned
+ontology data: the 82 observation variable ids whose public HiRID variable name (HiRID variable
+sheet; HIRID-ICU-Benchmark `varref.tsv`, MIT) is exactly the long common name of one LOINC term.
+Each match is validated against the LOINC pack there and gets `parent_codes = ["LOINC//<code>"]`,
+the LOINC long common name as description where the code had none, and
+`vocabulary_id`/`concept_code`. On HiRID 1.1.1, 67 of the 123 observation codes get a LOINC parent. The ETL alone does not emit these parents. HiRID has no
+same-dataset hierarchy (no code is a coarser version of another), so the file has no hierarchy
+rules. `tests/test_sumeds_rules.py` checks that the file is well formed and that every rule matches
+the code layouts of `configs/messy.yaml`.
 
 ## Testing
 

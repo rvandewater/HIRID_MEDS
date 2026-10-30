@@ -3,8 +3,7 @@
 The fixture mirrors the real HiRID 1.1.1 layout and dtypes (raw_stage parquet with Int32 ids and
 native timestamps; reference_data CSVs at the input root), because that is where this config has
 broken before: join keys of mismatched dtypes, and an `ID` that is listed under both `Source
-Table`s. Every value in it is made up, except that observation id 20000300 is one of the ids
-`metadata/observation_loinc.csv` gives a LOINC parent.
+Table`s. Every value in it is made up.
 """
 
 import os
@@ -182,6 +181,9 @@ def test_patient_events(meds: pl.DataFrame):
 def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     table = pq.read_table(meds_dir / "metadata" / "codes.parquet")
     CodeMetadataSchema.validate(table)
+    # The ETL adds no vocabulary parents; suMEDS adds LOINC parents from `sumeds_rules.yaml`
+    # (tests/test_sumeds_rules.py).
+    assert "parent_codes" not in table.column_names
     by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
     assert set(meds["code"]) <= set(by_code)
     # Literal codes have no components to attach metadata to; `hirid-meds-describe-codes` fills
@@ -192,15 +194,14 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     # Id 100 is in both tables; each code is described from its own table's row only.
     hr = by_code["OBSERVATION//Heart rate///min"]
     assert hr["description"].startswith("Heart rate [/min] (HiRID observation_tables")
-    assert "Drug" not in hr["description"] and hr["parent_codes"] is None
+    assert "Drug" not in hr["description"]
     drug = by_code["MEDICATION//Drug A"]
     assert drug["description"].startswith("Drug A (HiRID pharma_records")
     assert "Heart rate" not in drug["description"]
     assert by_code["OBSERVATION//GCS//UNK"]["description"].startswith("GCS [no unit]")
 
-    # LOINC parent by variable id; the reference's additional information is kept.
+    # The reference's additional information is kept.
     lab = by_code["OBSERVATION//Lab A//mmol/l"]
-    assert lab["parent_codes"] == ["LOINC/2744-1"]
     assert lab["description"].startswith("Lab A [mmol/l]; from a drain (HiRID")
 
     # An id without a reference entry is described by the fallback `_self` block.
