@@ -6,6 +6,8 @@ import polars as pl
 import yaml
 from dftly import Parser
 
+from HIRID_MEDS.code_descriptions import STATIC_DESCRIPTIONS_CSV
+
 ROOT = Path(__file__).parents[1] / "src" / "HIRID_MEDS"
 CONFIG_FP = ROOT / "configs" / "messy.yaml"
 LOINC_FP = ROOT / "metadata" / "observation_loinc.csv"
@@ -82,3 +84,13 @@ def test_component_coded_events_declare_a_description():
         if "??" in event["code"] and "variable_name" in event["code"]:
             assert "description" in blocks.get("_self", {}), f"{table}/{name}"
     assert not undescribed, undescribed
+
+
+def test_static_table_covers_exactly_the_literal_codes():
+    static = pl.read_csv(STATIC_DESCRIPTIONS_CSV.read_bytes(), infer_schema=False)
+    assert static.columns == ["code", "description", "source"]
+    assert static.null_count().sum_horizontal().item() == 0
+    assert not static["code"].is_duplicated().any()
+    literal = {str(e["code"]) for _, _, e in _events() if _is_literal(str(e["code"]))}
+    assert literal, "no literal-coded events found; the detection is stale"
+    assert set(static["code"]) == literal

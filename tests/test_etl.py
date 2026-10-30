@@ -8,6 +8,7 @@ Table`s. Every value in it is made up, except that observation id 20000300 is on
 """
 
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -183,7 +184,8 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     CodeMetadataSchema.validate(table)
     by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
     assert set(meds["code"]) <= set(by_code)
-    # Literal codes have no components to attach metadata to.
+    # Literal codes have no components to attach metadata to; `hirid-meds-describe-codes` fills
+    # them in after the run (next test).
     literal = {"HOSPITAL_ADMISSION", "HOSPITAL_DISCHARGE", "MEDS_BIRTH", "MEDS_DEATH"}
     assert {c for c, r in by_code.items() if r["description"] is None} == literal
 
@@ -208,3 +210,30 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     assert by_code["SEX//F"]["description"].startswith(
         "Sex: F (HiRID general_table.sex"
     )
+
+
+def test_describe_codes_fills_literal_codes(meds_dir: Path, tmp_path: Path):
+    codes_fp = tmp_path / "metadata" / "codes.parquet"
+    codes_fp.parent.mkdir()
+    shutil.copy(meds_dir / "metadata" / "codes.parquet", codes_fp)
+    before = pl.read_parquet(codes_fp)
+
+    cmd = [
+        str(Path(sys.executable).parent / "hirid-meds-describe-codes"),
+        str(tmp_path),
+    ]
+    for _ in range(2):  # idempotent
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stderr[-5000:]
+
+    table = pq.read_table(codes_fp)
+    CodeMetadataSchema.validate(table)
+    after = pl.from_arrow(table)
+    assert after["code"].to_list() == before["code"].to_list()
+    assert after.columns == before.columns
+    assert after["description"].null_count() == 0
+    # Extracted descriptions and parents are untouched.
+    described = before.filter(pl.col("description").is_not_null())
+    assert after.join(described, on="code", how="semi").equals(described)
+    by_code = dict(zip(after["code"], after["description"], strict=True))
+    assert by_code["MEDS_BIRTH"].startswith("Pseudo date of birth")

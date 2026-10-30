@@ -52,7 +52,8 @@ _defaults:
 #     fallback codes of ids without a reference entry, where it is null on every other row.
 #
 # Literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no block can
-# describe them.
+# describe them; `hirid-meds-describe-codes` fills them in after the run, from
+# `metadata/static_code_descriptions.csv`.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------

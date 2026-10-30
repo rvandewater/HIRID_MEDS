@@ -43,6 +43,7 @@ export DATASET_DOWNLOAD_PASSWORD=$PHYSIONET_PASSWORD
 export POLARS_ENGINE_AFFINITY=streaming  # see "Resources" below
 meds-extract-download spec=HIRID output_dir=$RAW_INPUT_DIR
 meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR do_download=false input_dir=$RAW_INPUT_DIR
+hirid-meds-describe-codes $MEDS_OUTPUT_DIR
 ```
 
 When you run this, the program will:
@@ -53,6 +54,9 @@ When you run this, the program will:
 2. Build the MEDS cohort from the unpacked files and write it to `$MEDS_OUTPUT_DIR` (`data/` and
     `metadata/`). All transformations are declared in
     [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml).
+3. Fill in the descriptions of the four literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, …) in
+    `metadata/codes.parquet`, which MEDS-Extract cannot describe (see
+    [Code metadata](#code-metadata)). The extraction is complete without this step.
 
 `meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR` without `do_download=false` does both steps
 in one command.
@@ -106,7 +110,8 @@ Run `meds-extract-run --help` for every option.
 
 The whole ETL is one MESSY (MEDS-Extract Specification Syntax YAML) file,
 [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml). The package contains no
-ETL code. The file declares:
+ETL code; its only code is the optional `hirid-meds-describe-codes` step (see
+[Code metadata](#code-metadata)). The file declares:
 
 - **`sources:`**: where the raw data lives (the PhysioNet release, restricted to the three archives
     above, unpacked after download).
@@ -209,8 +214,16 @@ chain encodes exactly the table, and that every component-coded event is describ
 `tests/test_etl.py` checks the extracted `codes.parquet` against the fixture and validates it
 against `meds.CodeMetadataSchema`.
 
-Literal codes (`HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
-components, so MEDS-Extract cannot attach metadata to them and they stay undescribed.
+**Literal codes** (`HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
+components for a `_metadata` block to join on, and the pre-existing `metadata/codes.parquet` that
+MEDS-Extract documents for this case is not read by its standard pipeline (`extract_code_metadata`
+reads the output of its prior metadata stage, `split_and_shard_subjects`, which writes no
+`codes.parquet`). `hirid-meds-describe-codes $MEDS_OUTPUT_DIR` fills them in after the run from
+[`src/HIRID_MEDS/metadata/static_code_descriptions.csv`](src/HIRID_MEDS/metadata/static_code_descriptions.csv),
+which records the source of every row (`hirid-docs`: the HiRID data structure docs; this ETL's
+config). It only writes descriptions that are null, never adds codes, is idempotent, and validates
+the file against `meds.CodeMetadataSchema` before replacing it. Without it, these four codes stay
+undescribed.
 
 ## Testing
 
@@ -234,6 +247,7 @@ synthetic ETL locally:
 uv pip install "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
 uv run MESSY-synth ./src/HIRID_MEDS/configs/messy.yaml -o raw_synthetic/ --explain
 uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_synthetic do_download=false
+uv run hirid-meds-describe-codes ./HIRID_meds_synth
 ```
 
 ## Citation

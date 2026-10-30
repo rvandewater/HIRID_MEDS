@@ -149,7 +149,10 @@ name = "hirid-meds"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "meds" },
     { name = "meds-extract", extra = ["download"] },
+    { name = "polars" },
+    { name = "pyarrow" },
 ]
 
 [package.optional-dependencies]
@@ -170,7 +173,10 @@ dev = [
 requires-dist = [
     { name = "hydra-joblib-launcher", marker = "extra == 'local-parallelism'" },
     { name = "hydra-submitit-launcher", marker = "extra == 'slurm-parallelism'" },
+    { name = "meds" },
     { name = "meds-extract", extras = ["download"], specifier = ">=0.7.1,<0.8" },
+    { name = "polars" },
+    { name = "pyarrow" },
 ]
 provides-extras = ["local-parallelism", "slurm-parallelism"]
 
