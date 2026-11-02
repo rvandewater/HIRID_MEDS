@@ -39,6 +39,24 @@ _defaults:
   subject_id: $patientid
 
 # ---------------------------------------------------------------------------
+# Code metadata (`metadata/codes.parquet`; see the README section "Code metadata").
+#
+# MEDS-Extract attaches a `_metadata` block by joining on the code's components. Two forms are used:
+#
+#   - an external block on `hirid_variable_reference`, the release's own variable dictionary,
+#     joined on the raw id (a partial match on one component, so every code built from that id
+#     gets it). The dictionary is vocabulary-sized and read once per shard, which matters for the
+#     ~777M observation rows. Its `ID` is unique only within a `Source Table`, so every output
+#     is gated on the table: rows of the other table produce all-null outputs and are dropped.
+#   - a `_self` block, evaluated on the event's own rows. It is used for `SEX//...` and for the
+#     fallback codes of ids without a reference entry, where it is null on every other row.
+#
+# Literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no block can
+# describe them; `hirid-meds-describe-codes` fills them in after the run, from
+# `metadata/static_code_descriptions.csv`.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # `general_table` (from `reference_data.tar.gz`, which unpacks flat into the input root) is the
 # patient/admission table. Everything the old `get_patient_link` + `save_last_event` did in polars
 # is expressed here:
@@ -76,6 +94,11 @@ general_table:
   sex:
     code: 'f"SEX//{$sex ?? ''UNK''}"'
     time: null
+    _metadata:
+      _self:
+        description: >-
+          f"Sex: {$sex ?? 'UNK'} (HiRID general_table.sex, documented as M or F; UNK when
+          missing)"
   birth:
     code: MEDS_BIRTH
     time: $date_of_birth
@@ -123,6 +146,16 @@ raw_stage/pharma_records/parquet:
     time: $givenat
     numeric_value: $givendose
     text_value: $doseunit
+    _metadata:
+      hirid_variable_reference:
+        pharmaid: $ID
+        description: >-
+          f"{$`Variable Name`} (HiRID pharma_records, drug or fluid given; name of the pharmaid in
+          hirid_variable_reference)" if $`Source Table` == "Pharma"
+      _self:
+        description: >-
+          f"HiRID pharmaid {$pharmaid} without a Pharma entry in hirid_variable_reference (name
+          unknown)" if ($variable_name ?? "") == ""
 
 raw_stage/observation_tables/parquet:
   _table:
@@ -143,3 +176,16 @@ raw_stage/observation_tables/parquet:
     time: $datetime
     numeric_value: $value
     text_value: '$stringvalue if $stringvalue != ""'
+    _metadata:
+      hirid_variable_reference:
+        variableid: $ID
+        description: >-
+          (f"{$`Variable Name`} [{$Unit ?? 'no unit'}]; {$`Additional information`} (HiRID
+          observation_tables, name and unit of the variableid in hirid_variable_reference)" if
+          $`Additional information` != "" else f"{$`Variable Name`} [{$Unit ?? 'no unit'}] (HiRID
+          observation_tables, name and unit of the variableid in hirid_variable_reference)") if
+          $`Source Table` == "Observation"
+      _self:
+        description: >-
+          f"HiRID observation variableid {$variableid} without an Observation entry in
+          hirid_variable_reference (name and unit unknown)" if ($variable_name ?? "") == ""

@@ -1,9 +1,13 @@
 """HiRID MEDS ETL -- a pure-config MEDS-Extract pipeline.
 
-This package contains no ETL code. The entire pipeline is `configs/messy.yaml`, registered under
-the `MEDS_extract.pipelines` entry-point group, so it runs as:
+The entire extraction is `configs/messy.yaml`, registered under the `MEDS_extract.pipelines`
+entry-point group, so it runs as:
 
     meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
+    hirid-meds-describe-codes $OUTPUT_DIR
+
+The second, optional command (`code_descriptions`) only fills in the descriptions of the literal
+codes, which MEDS-Extract cannot attach metadata to.
 """
 
 from importlib.metadata import PackageNotFoundError, version

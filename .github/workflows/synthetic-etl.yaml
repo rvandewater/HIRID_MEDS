@@ -53,6 +53,7 @@ jobs:
           uv run --no-sync MESSY-synth ./src/HIRID_MEDS/configs/messy.yaml -o raw_synthetic/ --explain
           uv run --no-sync meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth \
             input_dir=raw_synthetic do_download=false
+          uv run --no-sync hirid-meds-describe-codes ./HIRID_meds_synth
           for f in dataset.json codes.parquet subject_splits.parquet; do
             test -f "HIRID_meds_synth/metadata/$f"
           done

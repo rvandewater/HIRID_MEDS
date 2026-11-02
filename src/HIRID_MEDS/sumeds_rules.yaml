@@ -1,0 +1,39 @@
+# suMEDS rules for HiRID MEDS codes (format `sumeds-rules/0.1`, see
+# https://github.com/rvandewater/SumMEDS/blob/main/docs/enrichment.md).
+#
+# This ETL describes every code from HiRID's own variable reference but adds no vocabulary parents.
+# Run suMEDS with this file over `metadata/codes.parquet` to add them (see the README section
+# "Enriching code metadata with suMEDS"):
+#
+#   suMEDS-enrich $MEDS_OUTPUT_DIR/metadata/codes.parquet -o codes-enriched.parquet \
+#     --rules src/HIRID_MEDS/sumeds_rules.yaml
+#
+# Observation codes are `OBSERVATION//{Variable Name}//{Unit}`, or `OBSERVATION//{variableid}//UNK`
+# for an id without a reference entry. suMEDS's versioned ontology data (sumeds-ontologies, pinned
+# release) has the HiRID item-to-LOINC crosswalk (`hirid/observation_loinc`: 82 variable ids whose
+# public HiRID variable name is exactly a LOINC long common name), keyed on both the variable name
+# and the id, so each layout has a rule.
+#
+# The lazy `.+?` stops at the first `//` after the name, which is exact because a unit may start
+# with `/` (`OBSERVATION//Heart rate///min`) but a variable name contains no `//`.
+#
+# No hierarchy rules: HiRID codes have no coarser code of the same concept in the data (no
+# observation code without its unit, no drug code without its product).
+
+schema: sumeds-rules/0.1
+
+crosswalk:
+  - id: hirid-observation-loinc-by-name
+    pattern: "^OBSERVATION//(?P<key>.+?)//"
+    table: hirid/observation_loinc
+    key_column: variable_name
+    code_column: loinc_code
+    vocabulary: LOINC
+    validate: pack
+  - id: hirid-observation-loinc-by-id
+    pattern: "^OBSERVATION//(?P<key>[0-9]+)//"
+    table: hirid/observation_loinc
+    key_column: variableid
+    code_column: loinc_code
+    vocabulary: LOINC
+    validate: pack
