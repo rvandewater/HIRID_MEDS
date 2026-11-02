@@ -216,7 +216,7 @@ pinned release), which maintain one copy for all MEDS ETLs. This package ships a
 `sumeds-rules/0.1`). After the ETL, run:
 
 ```bash
-uvx --from "git+https://github.com/rvandewater/SumMEDS" suMEDS-enrich \
+uvx --from "sumeds>=0.4" suMEDS-enrich \
     $MEDS_OUTPUT_DIR/metadata/codes.parquet -o codes-enriched.parquet \
     --rules src/HIRID_MEDS/sumeds_rules.yaml
 ```
@@ -229,7 +229,7 @@ Each match is validated against the LOINC pack there and gets `parent_codes = ["
 the LOINC long common name as description where the code had none, and
 `vocabulary_id`/`concept_code`. On HiRID 1.1.1, 67 of the 123 observation codes get a LOINC parent. The ETL alone does not emit these parents. HiRID has no
 same-dataset hierarchy (no code is a coarser version of another), so the file has no hierarchy
-rules. `tests/test_sumeds_rules.py` checks that the file is well formed and that every rule matches
+rules. `tests/test_sumeds_rules.py` loads the file with suMEDS and checks that every rule matches
 the code layouts of `configs/messy.yaml`.
 
 ## Testing

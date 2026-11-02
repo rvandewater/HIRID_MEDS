@@ -36,8 +36,8 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
 
 [dependency-groups]
-# Installed by a plain `uv sync`.
-dev = ["pre-commit<4", "pytest"]
+# Installed by a plain `uv sync`. tests/test_sumeds_rules.py loads the packaged rules with suMEDS.
+dev = ["pre-commit<4", "pytest", "sumeds>=0.4"]
 
 [project.urls]
 Homepage = "https://github.com/rvandewater/HIRID_MEDS"
