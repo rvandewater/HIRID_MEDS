@@ -8,8 +8,15 @@ read by the standard extraction pipeline (``extract_code_metadata`` reads the ou
 metadata stage, ``split_and_shard_subjects``, which writes no ``codes.parquet``). So this module
 fills them in after the run, from ``metadata/static_code_descriptions.csv``:
 
-    meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR ...
+    suMEDS-extract spec=HIRID output_dir=$MEDS_OUTPUT_DIR ...
     hirid-meds-describe-codes $MEDS_OUTPUT_DIR
+
+suMEDS and this step only fill null descriptions, so on a code both could describe, the step that
+runs first would win. No code is in both: the static table holds exactly the literal codes, and
+suMEDS can describe a code only through the ``OBSERVATION//`` crosswalk rules of
+``sumeds_rules.yaml`` or its built-in layouts, which need a ``/`` in the code or an existing
+``parent_codes`` entry. A literal code has neither, so the order of the two steps does not change
+the result, and this step works the same after a plain ``meds-extract-run``.
 """
 
 import argparse
@@ -54,10 +61,11 @@ def apply_static_descriptions(
     """Fill the ``description`` of literal codes in a finished ``codes.parquet``, in place.
 
     Only null descriptions are filled (an extracted description always wins), and only codes
-    already in the file are touched: the vocabulary is never extended. The file is validated
-    against the MEDS code-metadata schema before it replaces the original: polars materializes
-    strings as Arrow ``large_string``, which that schema rejects, so the MEDS columns are cast
-    back to the types the pipeline itself writes (``string``, ``list<string>``).
+    already in the file are touched: the vocabulary is never extended. Only the ``description``
+    column is rewritten. The MEDS columns are cast to the types the pipeline itself writes
+    (``string``, ``list<string>``), which the MEDS code-metadata schema requires, and every other
+    column keeps its Arrow type, so the ``map<string, string>`` names of a suMEDS-enriched file
+    stay maps. The file is validated against that schema before it replaces the original.
 
     Args:
         codes_fp: The ``metadata/codes.parquet`` of a finished extraction.
@@ -84,35 +92,58 @@ def apply_static_descriptions(
         1
         >>> out.select("code", "description").rows()
         [('MEDS_BIRTH', 'Birth'), ('SEX//F', 'Sex: F'), ('SEX//M', None)]
+
+        The names map of a suMEDS-enriched file stays a map:
+
+        >>> enriched = pa.table({
+        ...     "code": ["MEDS_BIRTH", "OBSERVATION//Heart rate///min"],
+        ...     "description": [None, "Heart rate [/min]"],
+        ...     "parent_codes": [None, ["LOINC//8867-4"]],
+        ...     "parent_names": pa.array(
+        ...         [None, [("LOINC//8867-4", "Heart rate")]], pa.map_(pa.string(), pa.string())
+        ...     ),
+        ... })
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     fp = Path(d) / "codes.parquet"
+        ...     pq.write_table(enriched, fp)
+        ...     n = apply_static_descriptions(fp, static)
+        ...     out = pq.read_table(fp)
+        >>> n, out.schema.field("parent_names").type == enriched.schema.field("parent_names").type
+        (1, True)
+        >>> out.column("parent_names").to_pylist()
+        [None, [('LOINC//8867-4', 'Heart rate')]]
     """
     codes_fp = Path(codes_fp)
     if static is None:
         static = read_static_code_descriptions()
-    codes = pl.from_arrow(pq.read_table(codes_fp))
-    if "description" not in codes.columns:
-        codes = codes.with_columns(pl.lit(None, dtype=pl.String).alias("description"))
-    filled = (
-        codes.join(static.rename({"description": "_static"}), on="code", how="left")
-        .with_columns(pl.coalesce("description", "_static").alias("description"))
-        .drop("_static")
-        .select(codes.columns)
+    table = pq.read_table(codes_fp)
+    codes = pl.from_arrow(table.column("code")).cast(pl.String)
+    if "description" in table.column_names:
+        description = pl.from_arrow(table.column("description")).cast(pl.String)
+    else:
+        description = pl.Series("description", [None] * table.num_rows, pl.String)
+    lookup = dict(zip(static["code"], static["description"], strict=True))
+    filled = description.fill_null(
+        codes.replace_strict(lookup, default=None, return_dtype=pl.String)
     )
-    n_filled = int(
-        filled["description"].is_not_null().sum()
-        - codes["description"].is_not_null().sum()
-    )
+    n_filled = int(filled.is_not_null().sum() - description.is_not_null().sum())
 
-    out = filled.to_arrow()
+    filled = filled.to_arrow().cast(pa.string())
+    if "description" in table.column_names:
+        index = table.schema.get_field_index("description")
+        table = table.set_column(index, "description", filled)
+    else:
+        table = table.append_column("description", filled)
     meds_types = {
         "code": pa.string(),
         "description": pa.string(),
         "parent_codes": pa.list_(pa.string()),
     }
-    out = out.cast(
-        pa.schema(
-            [pa.field(f.name, meds_types.get(f.name, f.type)) for f in out.schema]
-        )
-    )
+    fields = [
+        field.with_type(meds_types[field.name]) if field.name in meds_types else field
+        for field in table.schema
+    ]
+    out = table.cast(pa.schema(fields, metadata=table.schema.metadata))
     CodeMetadataSchema.validate(out)
 
     tmp_fp = codes_fp.with_suffix(".parquet.tmp")
@@ -122,21 +153,22 @@ def apply_static_descriptions(
 
 
 def main(argv: list[str] | None = None) -> None:
-    """``hirid-meds-describe-codes``: fill literal-code descriptions after ``meds-extract-run``."""
+    """``hirid-meds-describe-codes``: fill literal-code descriptions after the ETL run."""
     parser = argparse.ArgumentParser(
         prog="hirid-meds-describe-codes", description=__doc__.splitlines()[0]
     )
     parser.add_argument(
         "output_dir",
         type=Path,
-        help="The meds-extract-run output_dir (or its metadata/codes.parquet).",
+        help="The output_dir of suMEDS-extract or meds-extract-run (or its "
+        "metadata/codes.parquet).",
     )
     args = parser.parse_args(argv)
     codes_fp = args.output_dir
     if codes_fp.is_dir():
         codes_fp = codes_fp / "metadata" / "codes.parquet"
     if not codes_fp.is_file():
-        parser.error(f"{codes_fp} not found; run meds-extract-run first.")
+        parser.error(f"{codes_fp} not found; run the ETL first.")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     n_filled = apply_static_descriptions(codes_fp)
     logger.info(f"Filled the descriptions of {n_filled} literal codes in {codes_fp}.")
