@@ -1,26 +1,85 @@
 {
   "code_metadata": {
     "description_length": {
-      "mean": 117.495,
-      "n": 650,
+      "mean": 117.946,
+      "n": 654,
       "quantiles": {
-        "p1": 100.49,
+        "p1": 100.53,
         "p25": 111.0,
         "p5": 106.0,
         "p50": 114.0,
-        "p75": 120.0,
-        "p95": 139.55,
-        "p99": 169.04
+        "p75": 121.0,
+        "p95": 141.0,
+        "p99": 177.35
       },
-      "std": 13.1722
+      "std": 14.3925
     },
     "n_codes": 654,
     "n_data_codes_missing_from_metadata": 0,
     "n_metadata_codes_absent_from_data": 0,
-    "n_with_description": 650,
-    "n_with_parent_codes": null,
+    "n_with_description": 654,
+    "n_with_parent_codes": 67,
     "ontology": {
-      "present": false
+      "by_vocabulary": {
+        "LOINC": {
+          "keys_digest": "sha256:d789eacd4f5b958e231bd608999f48e663614ea1ccd5dd54df7dfa5ac4155876",
+          "n_child_codes": 67,
+          "n_distinct_keys": 67,
+          "n_measurements": 146884921,
+          "n_subjects": 33903,
+          "numeric": {
+            "mean": 186.26,
+            "n_finite": 146860522,
+            "std": 784.078
+          },
+          "recognized": true
+        }
+      },
+      "coverage": {
+        "frac_measurements_mapped": 0.189519,
+        "frac_observed_codes_with_parents": 0.102446,
+        "n_measurements_mapped": 146884921,
+        "n_measurements_unmapped": 628156046,
+        "n_observed_codes": 654,
+        "n_observed_codes_with_parents": 67,
+        "n_observed_codes_without_parents": 587
+      },
+      "n_codes_in_multiple_vocabularies": 0,
+      "n_codes_with_parents": 67,
+      "n_distinct_parents": 67,
+      "n_parent_links": 67,
+      "n_parents_without_vocabulary": 0,
+      "n_vocabularies": 1,
+      "n_vocabularies_recognized": 1,
+      "parents_per_code": {
+        "mean": 0.102446,
+        "n": 654,
+        "quantiles": {
+          "p1": 0.0,
+          "p25": 0.0,
+          "p5": 0.0,
+          "p50": 0.0,
+          "p75": 0.0,
+          "p95": 1.0,
+          "p99": 1.0
+        },
+        "std": 0.303467
+      },
+      "present": true,
+      "vocabularies_per_code": {
+        "mean": 0.102446,
+        "n": 654,
+        "quantiles": {
+          "p1": 0.0,
+          "p25": 0.0,
+          "p5": 0.0,
+          "p50": 0.0,
+          "p75": 0.0,
+          "p95": 1.0,
+          "p99": 1.0
+        },
+        "std": 0.303467
+      }
     },
     "present": true,
     "vocabulary_digest": "sha256:a05670f6d5295e769251eecead117a93d2bdf3d61c1d6e846992cf225ebc2847"
@@ -145,13 +204,42 @@
     }
   },
   "dataset": {
-    "created_at": "2026-11-04T15:54:33.739011+00:00",
+    "created_at": "2026-11-07T19:31:12.090108+00:00",
     "dataset_name": "hirid",
     "dataset_version": "1.1.1:0.1.0",
     "etl_name": "MEDS_transforms",
     "etl_version": "0.7.0",
     "meds_version": "0.4.1",
-    "present": true
+    "present": true,
+    "sumeds_enrichment": {
+      "athena": false,
+      "coverage": {
+        "codes": 654,
+        "described": [
+          650,
+          650
+        ],
+        "with_parent_codes": [
+          0,
+          67
+        ]
+      },
+      "enriched": true,
+      "enriched_at": "2026-11-07T19:32:39Z",
+      "ontology_source": "rvandewater/sumeds-ontologies@v0.2.0",
+      "options": {
+        "child_codes": false,
+        "child_depth": 3,
+        "exclude_self_parent_code": false,
+        "loinc_hierarchy": false,
+        "packs": true,
+        "parent_codes": true,
+        "sibling_codes": false
+      },
+      "rules": "HIRID",
+      "rules_sha256": "81162d14d60287e55e11b892acae3b2eaea16689f18c2d263c840b3b14c387c1",
+      "sumeds_version": "0.6.1"
+    }
   },
   "dataset_digest": {
     "by_file": {
@@ -191,27 +279,34 @@
       "data/tuning/1.parquet": "sha256:9eadffc134346666dd6e1b8362394fc110e8366ff108d70cacf41164479c2bdb",
       "data/tuning/2.parquet": "sha256:9a2511e12f7ae0d3b774d961df565ebdcb0f5c500b46b8867b82a529d8214e9d",
       "data/tuning/3.parquet": "sha256:b8f6676b659f2b37c22d7ddc355e67b507844c686a9d5c158282509e2c0cb493",
-      "metadata/codes.parquet": "sha256:add6d8fbab892082b8265dc13a2d11421bb4c6460743652a2fbe73c8fc026164",
-      "metadata/dataset.json": "sha256:b4a3f0df137e37a0addc7c57c00ab986a22912bb3930f718ec419230c3f34f10",
+      "metadata/codes.parquet": "sha256:aa289f487ec6451f3f84b9897dda57cdec09407d691ce29aa9ae13a2a96b3660",
+      "metadata/dataset.json": "sha256:9c7cb7bf9002cbf259225a414d7e0d0cc4f8f67a7230cea76b899a55fa2a3afc",
       "metadata/subject_splits.parquet": "sha256:339349d2380839e0e3ccbbf402d67f2ad0ea60368d54535bf6003d7bd20165ce"
     },
-    "code_metadata": "sha256:2d3a238e82da351a770ebd0106685a27bd0ebd568c796033a842de65f5e7425d",
-    "combined": "sha256:2d169ccb42a8665e15678b77ef7a5b7cddc451b3a2dbfe03f4f1c7a64a4b4516",
+    "code_metadata": "sha256:40f45e792a74082971aff51301e82a6bcd9258a0224c807af71364e13f324f53",
+    "combined": "sha256:ffed6f0a493a5b7a9cce879dede737d5c86878a918f0c886f8835dd849956bcf",
     "data": {
       "digest": "sha256:675b741d61eee10e82d2536ba8241cb575cb411df87a747c7ee9c81cf58f52e0",
       "n_files": 36
     },
-    "dataset_metadata": "sha256:2c94eb7135d5ecf232ead077b630e25eb05fd4a950967fc7dc6927d3cbe89386",
+    "dataset_metadata": "sha256:297ed945735a2cd656c0f747c12a4a731abc4868baea564ec0e35d945ebdaa1b",
     "method": "files",
     "n_files": 39,
     "subject_splits": "sha256:aad1a8e9fc36598f58380165492935b17f5471fc3ada6286d2df80349bff6aa8"
   },
-  "extracted_at": "2026-11-04T22:17:06.262298",
+  "extracted_at": "2026-11-07T19:33:23.202659",
   "layout": {
     "code_metadata_columns": {
       "code": "String",
       "code_template": "String",
-      "description": "String"
+      "concept_code": "String",
+      "concept_id": "Int64",
+      "description": "String",
+      "domain_id": "String",
+      "parent_codes": "List(String)",
+      "parent_names": "Map(String, String)",
+      "standard_concept": "String",
+      "vocabulary_id": "String"
     },
     "column_dtype_conflicts": {},
     "column_presence": {
