@@ -1,4 +1,4 @@
-# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.7).
+# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.8).
 #
 # This single file replaces what used to be spread across four places:
 #   - `dataset.yaml`          -> the `sources:` block below
@@ -76,7 +76,7 @@ _defaults:
 
 general_table:
   _table:
-    join:
+    joins:
       raw_stage/observation_tables/parquet:
         left_on: _obs_patientid
         right_on: patientid
@@ -130,7 +130,7 @@ general_table:
 
 raw_stage/pharma_records/parquet:
   _table:
-    join:
+    joins:
       hirid_variable_reference:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]
@@ -159,7 +159,7 @@ raw_stage/pharma_records/parquet:
 
 raw_stage/observation_tables/parquet:
   _table:
-    join:
+    joins:
       hirid_variable_reference:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]

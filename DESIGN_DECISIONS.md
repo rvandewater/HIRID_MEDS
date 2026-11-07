@@ -3,7 +3,8 @@
 This file records the modelling choices made in
 [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml) for the MEDS-Extract 0.7
 migration ([PR #2](https://github.com/rvandewater/HIRID_MEDS/pull/2)), why they were made, and
-which ones are still open. Open questions link to their GitHub issue.
+which ones are still open. Open questions link to their GitHub issue. The config has since moved
+to MEDS-Extract 0.8; for this config, that renames `_table.join` to `_table.joins`.
 
 All numbers are from HiRID **1.1.1** (`reference_data.tar.gz`,
 `raw_stage/observation_tables_parquet.tar.gz`, `raw_stage/pharma_records_parquet.tar.gz`, checksums
@@ -122,7 +123,7 @@ microseconds; no raw timestamp has a sub-microsecond component, so nothing is lo
 
 ### D9. Joins are left joins (behaviour change)
 
-MEDS-Extract 0.7 joins are always left joins. The old pipeline inner-joined every event table to
+MEDS-Extract joins (0.7 and 0.8) are always left joins. The old pipeline inner-joined every event table to
 the patient table and to the variable reference, silently dropping rows for unknown patients or
 unknown variables. Now every raw row is kept: unknown variables get the fallback code (D3).
 Every observation/pharma patient is present in `general_table`, so no rows depend on this for

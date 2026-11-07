@@ -1,13 +1,15 @@
 """HiRID MEDS ETL -- a pure-config MEDS-Extract pipeline.
 
 The entire extraction is `configs/messy.yaml`, registered under the `MEDS_extract.pipelines`
-entry-point group, so it runs as:
+entry-point group, and `sumeds_rules.yaml` is registered under suMEDS's `sumeds.rules` group with
+the same name, so the ETL and its suMEDS enrichment run as:
 
-    meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR
+    suMEDS-extract spec=HIRID output_dir=$OUTPUT_DIR
     hirid-meds-describe-codes $OUTPUT_DIR
 
-The second, optional command (`code_descriptions`) only fills in the descriptions of the literal
-codes, which MEDS-Extract cannot attach metadata to.
+`meds-extract-run spec=HIRID output_dir=$OUTPUT_DIR` runs the ETL alone. The second, optional
+command (`code_descriptions`) only fills in the descriptions of the literal codes, which
+MEDS-Extract cannot attach metadata to.
 """
 
 from importlib.metadata import PackageNotFoundError, version

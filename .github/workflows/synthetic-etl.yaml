@@ -3,7 +3,7 @@ name: Synthetic ETL for MESSY files using MESSY_synth
 # Generates raw files straight from the shipped MESSY config with MESSY-synth and runs the ETL over
 # them. MESSY-synth validates that every event block yields events and fails the job otherwise, so
 # this catches expressions that only work on the dtypes of one particular release. It complements
-# the hand-written fixture in tests/test_etl.py, which checks specific values.
+# the hand-written fixture in tests/conftest.py, which tests/test_etl.py checks value by value.
 
 on:
   push:
@@ -41,19 +41,28 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: |
-          uv sync --locked
-          # The variable-reference join is keyed on derived columns (a `Source Table` literal and a
-          # cast id). Released MESSY_synth cannot adopt join keys through those; pin the commit
-          # that can (mmcdermott/MESSY_synth#12) until it is merged and released.
-          uv pip install "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
+        run: uv sync --locked
 
-      - name: Generate and extract synthetic data
+      - name: Generate synthetic data
+        # MESSY-synth has no release for MEDS-Extract 0.8 yet: it requires MEDS-Extract <0.8 and
+        # reads the 0.7 spelling `_table.join`. So it runs in a tool environment of its own, on a
+        # copy of the config with `joins:` spelled `join:`. Every table here joins a single target,
+        # which both spellings express the same way; 0.7 rejects a second target loudly. The
+        # variable-reference join is keyed on derived columns (a `Source Table` literal and a cast
+        # id). Released MESSY_synth cannot adopt join keys through those; pin the commit that can
+        # (mmcdermott/MESSY_synth#12) until it is merged and released.
         run: |
-          uv run --no-sync MESSY-synth ./src/HIRID_MEDS/configs/messy.yaml -o raw_synthetic/ --explain
-          uv run --no-sync meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth \
+          sed 's/^    joins:$/    join:/' src/HIRID_MEDS/configs/messy.yaml >messy_0.7.yaml
+          uvx --python ${{ matrix.python-version }} \
+            --from "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219" \
+            MESSY-synth ./messy_0.7.yaml -o raw_synthetic/ --explain
+
+      - name: Extract synthetic data
+        # The extraction runs with this project's locked MEDS-Extract.
+        run: |
+          uv run --locked meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth \
             input_dir=raw_synthetic do_download=false
-          uv run --no-sync hirid-meds-describe-codes ./HIRID_meds_synth
+          uv run --locked hirid-meds-describe-codes ./HIRID_meds_synth
           for f in dataset.json codes.parquet subject_splits.parquet; do
             test -f "HIRID_meds_synth/metadata/$f"
           done

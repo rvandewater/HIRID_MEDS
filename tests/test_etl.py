@@ -1,128 +1,19 @@
-"""End-to-end run of the bundled MESSY config over a tiny hand-written HiRID-shaped fixture.
+"""End-to-end run of the bundled MESSY config over the tiny HiRID-shaped fixture of ``conftest.py``.
 
-The fixture mirrors the real HiRID 1.1.1 layout and dtypes (raw_stage parquet with Int32 ids and
-native timestamps; reference_data CSVs at the input root), because that is where this config has
+The fixture mirrors the real HiRID 1.1.1 layout and dtypes, because that is where this config has
 broken before: join keys of mismatched dtypes, and an `ID` that is listed under both `Source
 Table`s. Every value in it is made up.
 """
 
-import os
 import shutil
-import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import polars as pl
 import pyarrow.parquet as pq
-import pytest
+from conftest import T0, run_command
 from meds import CodeMetadataSchema
 from MEDS_extract.config import MessyConfig
-
-T0 = datetime(2150, 1, 1, 8, 0)
-
-
-def _write_fixture(root: Path) -> None:
-    pl.DataFrame(
-        {
-            "patientid": [1, 2, 3],
-            "admissiontime": [
-                "2150-01-01 08:00:00",
-                "2150-01-01 08:00:00",
-                "2150-01-01 08:00:00",
-            ],
-            "sex": ["M", "F", "F"],
-            "age": [60, 70, 80],
-            "discharge_status": ["alive", "dead", None],
-        }
-    ).write_csv(root / "general_table.csv")
-    # ID 100 is both an observation variable and a drug, as one id is in the real reference.
-    pl.DataFrame(
-        {
-            "Source Table": [
-                "Observation",
-                "Observation",
-                "Observation",
-                "Pharma",
-                "Pharma",
-            ],
-            "ID": [100, 200, 20000300, 100, 300],
-            "Variable Name": ["Heart rate", "GCS", "Lab A", "Drug A", "Drug B"],
-            "Unit": ["/min", None, "mmol/l", None, None],
-            "Additional information": [None, None, "from a drain", None, None],
-        }
-    ).write_csv(root / "hirid_variable_reference.csv")
-
-    obs_dir = root / "raw_stage" / "observation_tables" / "parquet"
-    obs_dir.mkdir(parents=True)
-    pl.DataFrame(
-        {
-            "datetime": [
-                T0,
-                T0.replace(hour=9),
-                T0.replace(hour=9),
-                T0.replace(hour=10),
-                T0,
-                T0.replace(hour=12),
-                T0.replace(hour=11),
-            ],
-            "patientid": [1, 1, 1, 1, 2, 2, 2],
-            "stringvalue": ["", "", "", "abnormal", "", "", ""],
-            "value": [80.0, 85.0, 15.0, None, 90.0, 95.0, 7.4],
-            # 999 has no reference entry.
-            "variableid": [100, 100, 200, 999, 100, 100, 20000300],
-        },
-        schema_overrides={
-            "patientid": pl.Int32,
-            "variableid": pl.Int32,
-            "value": pl.Float32,
-        },
-    ).with_columns(pl.col("datetime").cast(pl.Datetime("ns"))).write_parquet(
-        obs_dir / "part-0.parquet"
-    )
-
-    pharma_dir = root / "raw_stage" / "pharma_records" / "parquet"
-    pharma_dir.mkdir(parents=True)
-    pl.DataFrame(
-        {
-            "patientid": [1, 2],
-            "pharmaid": [100, 300],
-            "givenat": [T0.replace(hour=9), T0.replace(hour=11)],
-            "givendose": [5.0, 1.5],
-            "doseunit": ["mg", "ml"],
-        },
-        schema_overrides={
-            "patientid": pl.Int32,
-            "pharmaid": pl.Int32,
-            "givendose": pl.Float32,
-        },
-    ).with_columns(pl.col("givenat").cast(pl.Datetime("ns"))).write_parquet(
-        pharma_dir / "part-0.parquet"
-    )
-
-
-@pytest.fixture(scope="module")
-def meds_dir(tmp_path_factory) -> Path:
-    tmp = tmp_path_factory.mktemp("hirid")
-    raw, out = tmp / "raw", tmp / "out"
-    raw.mkdir()
-    _write_fixture(raw)
-
-    # meds-extract-run shells out to MEDS_transform-stage, which must be on PATH.
-    bin_dir = Path(sys.executable).parent
-    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    cmd = [
-        str(bin_dir / "meds-extract-run"),
-        "spec=HIRID", f"output_dir={out}", f"input_dir={raw}", "do_download=false",
-    ]  # fmt: skip
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
-    assert result.returncode == 0, result.stderr[-5000:]
-    return out
-
-
-@pytest.fixture(scope="module")
-def meds(meds_dir: Path) -> pl.DataFrame:
-    return pl.read_parquet(meds_dir / "data" / "**" / "*.parquet")
 
 
 def test_registered_spec_loads():
@@ -182,7 +73,7 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     table = pq.read_table(meds_dir / "metadata" / "codes.parquet")
     CodeMetadataSchema.validate(table)
     # The ETL adds no vocabulary parents; suMEDS adds LOINC parents from `sumeds_rules.yaml`
-    # (tests/test_sumeds_rules.py).
+    # (tests/test_run_with_enrichment.py).
     assert "parent_codes" not in table.column_names
     by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
     assert set(meds["code"]) <= set(by_code)
@@ -219,13 +110,8 @@ def test_describe_codes_fills_literal_codes(meds_dir: Path, tmp_path: Path):
     shutil.copy(meds_dir / "metadata" / "codes.parquet", codes_fp)
     before = pl.read_parquet(codes_fp)
 
-    cmd = [
-        str(Path(sys.executable).parent / "hirid-meds-describe-codes"),
-        str(tmp_path),
-    ]
     for _ in range(2):  # idempotent
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        assert result.returncode == 0, result.stderr[-5000:]
+        run_command(["hirid-meds-describe-codes", str(tmp_path)])
 
     table = pq.read_table(codes_fp)
     CodeMetadataSchema.validate(table)

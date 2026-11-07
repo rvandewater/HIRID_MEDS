@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a **MEDS-Extract 0.7 ETL**. All of it is one declarative file; there is no
+This repository is a **MEDS-Extract 0.8 ETL**. All of it is one declarative file; there is no
 Python to change.
 
 ```bash
@@ -9,8 +9,12 @@ export DATASET_DOWNLOAD_USERNAME=$PHYSIONET_USERNAME
 export DATASET_DOWNLOAD_PASSWORD=$PHYSIONET_PASSWORD
 export POLARS_ENGINE_AFFINITY=streaming
 
-meds-extract-run spec=HIRID output_dir=$ROOT_OUTPUT_DIR
+suMEDS-extract spec=HIRID output_dir=$ROOT_OUTPUT_DIR
+hirid-meds-describe-codes $ROOT_OUTPUT_DIR
 ```
+
+`suMEDS-extract` runs `meds-extract-run spec=HIRID` and then enriches the code metadata with the
+packaged suMEDS rules; `meds-extract-run` alone runs the plain ETL (see the README).
 
 ## What the 0.7 layout looks like
 
@@ -24,7 +28,7 @@ Under MEDS-Transforms 0.2.x an ETL was a Python package: `pre_MEDS.py` reshaped 
 | `dataset.yaml` + `download.py` | the `sources:` block                                                      |
 | `configs/ETL.yaml`             | nothing — the stage sequence is canonical and not configurable            |
 | `configs/event_configs.yaml`   | the event tables, written in [dftly](https://github.com/mmcdermott/dftly) |
-| `pre_MEDS.py`                  | `_table.join` / `_table.cols`                                             |
+| `pre_MEDS.py`                  | `_table.joins` / `_table.cols`                                            |
 
 The file lives at [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml) and is
 registered under the `MEDS_extract.pipelines` entry-point group in `pyproject.toml`:
@@ -51,9 +55,11 @@ Three things bite newcomers, in rough order of how often:
     A bare `null` parses as the *string* `"null"`. Tracked in
     [dftly#113](https://github.com/mmcdermott/dftly/issues/113).
 
-Also worth knowing: a table may declare **exactly one** `_table.join`, `_table.cols` entries are
-evaluated in order so later ones may reference earlier ones, and adding a Duration to a Datetime
-must be written as `anchor - (-$offset)::minutes` because `+` does not lower correctly.
+Also worth knowing: `_table.joins` may list several targets, each its own left join, but no join
+may key on a column another join delivers (0.7 called it `_table.join` and allowed one target).
+`_table.cols` entries are evaluated in order so later ones may reference earlier ones, and adding a
+Duration to a Datetime must be written as `anchor - (-$offset)::minutes` because `+` does not lower
+correctly.
 
 Specific to HiRID:
 

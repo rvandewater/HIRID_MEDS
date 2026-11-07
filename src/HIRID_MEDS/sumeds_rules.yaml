@@ -2,11 +2,13 @@
 # https://github.com/rvandewater/SumMEDS/blob/main/docs/enrichment.md).
 #
 # This ETL describes every code from HiRID's own variable reference but adds no vocabulary parents.
-# Run suMEDS with this file over `metadata/codes.parquet` to add them (see the README section
-# "Enriching code metadata with suMEDS"):
+# suMEDS adds them with this file, which pyproject.toml registers in suMEDS's `sumeds.rules`
+# entry-point group under the spec name `HIRID` (see the README section "Enriching code metadata
+# with suMEDS"). `suMEDS-extract spec=HIRID output_dir=...` runs the ETL and then enriches its
+# `metadata/codes.parquet` in place; for an existing build:
 #
-#   suMEDS-enrich $MEDS_OUTPUT_DIR/metadata/codes.parquet -o codes-enriched.parquet \
-#     --rules src/HIRID_MEDS/sumeds_rules.yaml
+#   suMEDS-enrich "$MEDS_OUTPUT_DIR/metadata/codes.parquet" \
+#     -o "$MEDS_OUTPUT_DIR/metadata/codes.parquet" --rules HIRID
 #
 # Observation codes are `OBSERVATION//{Variable Name}//{Unit}`, or `OBSERVATION//{variableid}//UNK`
 # for an id without a reference entry. suMEDS's versioned ontology data (sumeds-ontologies, pinned
