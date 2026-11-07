@@ -16,7 +16,9 @@ runs first would win. No code is in both: the static table holds exactly the lit
 suMEDS can describe a code only through the ``OBSERVATION//`` crosswalk rules of
 ``sumeds_rules.yaml`` or its built-in layouts, which need a ``/`` in the code or an existing
 ``parent_codes`` entry. A literal code has neither, so the order of the two steps does not change
-the result, and this step works the same after a plain ``meds-extract-run``.
+the result, and this step works the same after a plain ``meds-extract-run``. It rewrites only
+``codes.parquet``: ``metadata/dataset.json``, where suMEDS records whether the build was enriched
+(``sumeds_enrichment``), is left as it is.
 """
 
 import argparse

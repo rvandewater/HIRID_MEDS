@@ -10,20 +10,27 @@ packs.
 Both steps only fill null descriptions, so on a code both could describe the first would win. The
 test checks that no code is in both: suMEDS leaves the literal codes undescribed, and the static
 descriptions fill exactly those.
+
+suMEDS records the enrichment in `metadata/dataset.json`, and `hirid-meds-describe-codes` rewrites
+only `codes.parquet`, so the record survives it. With an empty pack source, the enrichment fails
+without failing the ETL: the plain `codes.parquet` is kept, the failure is recorded, and
+`suMEDS-enrich` on the output enriches it later, before or after `hirid-meds-describe-codes`.
 """
 
 import csv
 import hashlib
 import io
 import json
+import shutil
 from pathlib import Path
+from typing import NamedTuple
 
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from conftest import run_command
-from meds import CodeMetadataSchema
+from meds import CodeMetadataSchema, DatasetMetadataSchema
 
 from HIRID_MEDS.code_descriptions import read_static_code_descriptions
 
@@ -123,11 +130,7 @@ def ontology_source(tmp_path_factory) -> Path:
     return root
 
 
-@pytest.fixture(scope="session")
-def enriched(tmp_path_factory, raw_dir: Path, ontology_source: Path):
-    """The output directory, and its `codes.parquet` after each of the two steps."""
-    output_dir = tmp_path_factory.mktemp("hirid_enriched") / "out"
-    codes_fp = output_dir / "metadata" / "codes.parquet"
+def run_with_enrichment(output_dir: Path, raw_dir: Path, ontology_source: Path) -> Path:
     run_command(
         [
             "suMEDS-extract",
@@ -140,9 +143,41 @@ def enriched(tmp_path_factory, raw_dir: Path, ontology_source: Path):
             str(ontology_source),
         ]
     )
+    return output_dir
+
+
+def enrichment_record(output_dir: Path) -> dict:
+    """The `sumeds_enrichment` record of the output's `dataset.json`, which must stay valid MEDS."""
+    metadata = json.loads((output_dir / "metadata" / "dataset.json").read_text())
+    DatasetMetadataSchema.validate(metadata)
+    return metadata["sumeds_enrichment"]
+
+
+class Enriched(NamedTuple):
+    output_dir: Path
+    after_sumeds: pa.Table
+    after_describe: pa.Table
+    #: `metadata/dataset.json` after `suMEDS-extract`, before `hirid-meds-describe-codes`.
+    dataset_json_after_sumeds: bytes
+
+
+@pytest.fixture(scope="session")
+def enriched(tmp_path_factory, raw_dir: Path, ontology_source: Path) -> Enriched:
+    """The output directory, and its metadata after each of the two steps."""
+    output_dir = tmp_path_factory.mktemp("hirid_enriched") / "out"
+    run_with_enrichment(output_dir, raw_dir, ontology_source)
+    codes_fp = output_dir / "metadata" / "codes.parquet"
     after_sumeds = pq.read_table(codes_fp)
+    dataset_json = (output_dir / "metadata" / "dataset.json").read_bytes()
     run_command(["hirid-meds-describe-codes", str(output_dir)])
-    return output_dir, after_sumeds, pq.read_table(codes_fp)
+    return Enriched(output_dir, after_sumeds, pq.read_table(codes_fp), dataset_json)
+
+
+@pytest.fixture(scope="session")
+def soft_failed_dir(tmp_path_factory, raw_dir: Path) -> Path:
+    """`suMEDS-extract` with an empty pack source, as on a site that cannot reach the packs."""
+    output_dir = tmp_path_factory.mktemp("hirid_soft_fail") / "out"
+    return run_with_enrichment(output_dir, raw_dir, tmp_path_factory.mktemp("no_packs"))
 
 
 def _rows(table: pa.Table) -> dict[str, dict]:
@@ -150,7 +185,7 @@ def _rows(table: pa.Table) -> dict[str, dict]:
 
 
 def test_codes_parquet_stays_valid_meds_metadata(enriched):
-    output_dir, after_sumeds, after_describe = enriched
+    output_dir, after_sumeds, after_describe, _ = enriched
     CodeMetadataSchema.validate(after_sumeds)
     CodeMetadataSchema.validate(after_describe)
     metadata = output_dir / "metadata"
@@ -163,14 +198,14 @@ def test_codes_parquet_stays_valid_meds_metadata(enriched):
 
 
 def test_data_matches_the_plain_etl(enriched, meds: pl.DataFrame):
-    output_dir, _, _ = enriched
+    output_dir = enriched.output_dir
     events = pl.read_parquet(output_dir / "data" / "**" / "*.parquet")
     key = ["subject_id", "time", "code"]
     assert events.sort(key).select(key).equals(meds.sort(key).select(key))
 
 
 def test_enrichment_is_non_destructive(enriched, meds_dir: Path):
-    _, after_sumeds, after_describe = enriched
+    _, after_sumeds, after_describe, _ = enriched
     before = _rows(pq.read_table(meds_dir / "metadata" / "codes.parquet"))
     for after in (after_sumeds, after_describe):
         rows = _rows(after)
@@ -185,7 +220,7 @@ def test_enrichment_is_non_destructive(enriched, meds_dir: Path):
 
 def test_static_and_sumeds_descriptions_do_not_overlap(enriched):
     """suMEDS describes none of the literal codes, so the run order of the two steps is free."""
-    _, after_sumeds, after_describe = enriched
+    _, after_sumeds, after_describe, _ = enriched
     static = dict(read_static_code_descriptions().iter_rows())
     undescribed = {
         c for c, r in _rows(after_sumeds).items() if r["description"] is None
@@ -197,8 +232,7 @@ def test_static_and_sumeds_descriptions_do_not_overlap(enriched):
 
 
 def test_observation_codes_get_loinc_parents(enriched):
-    _, _, after_describe = enriched
-    rows = _rows(after_describe)
+    rows = _rows(enriched.after_describe)
     parents = {
         code: row["parent_codes"] for code, row in rows.items() if row["parent_codes"]
     }
@@ -221,3 +255,58 @@ def test_observation_codes_get_loinc_parents(enriched):
         "MEDICATION//Drug A",
     ):
         assert rows[code]["vocabulary_id"] is None, code
+
+
+def test_dataset_json_records_the_enrichment(enriched):
+    record = enrichment_record(enriched.output_dir)
+    assert record["enriched"] is True
+    assert record["rules"] == "HIRID"
+    assert record["ontology_source"] == "local"
+    described = pl.from_arrow(enriched.after_sumeds)["description"].is_not_null().sum()
+    assert record["coverage"]["codes"] == enriched.after_sumeds.num_rows
+    assert record["coverage"]["described"][1] == described
+    assert record["coverage"]["with_parent_codes"] == [0, len(EXPECTED_PARENTS)]
+
+
+def test_describe_codes_keeps_the_enrichment_record(enriched):
+    """`hirid-meds-describe-codes` rewrites only `codes.parquet`, never `dataset.json`."""
+    dataset_json = enriched.output_dir / "metadata" / "dataset.json"
+    assert dataset_json.read_bytes() == enriched.dataset_json_after_sumeds
+
+
+def test_failed_enrichment_keeps_the_plain_etl_output(
+    soft_failed_dir: Path, meds_dir: Path
+):
+    codes = Path("metadata", "codes.parquet")
+    assert (soft_failed_dir / codes).read_bytes() == (meds_dir / codes).read_bytes()
+    record = enrichment_record(soft_failed_dir)
+    assert record["enriched"] is False
+    assert record["rules"] == "HIRID"
+    # The pack directory is not recorded, so the retry asks for it again.
+    assert record["retry"] == "suMEDS-enrich <MEDS_ROOT> --ontology-source <PACKS_DIR>"
+
+
+@pytest.mark.parametrize("describe_first", [False, True])
+def test_failed_enrichment_can_be_retried(
+    soft_failed_dir: Path,
+    ontology_source: Path,
+    enriched,
+    tmp_path: Path,
+    describe_first: bool,
+):
+    """`suMEDS-enrich OUT` gives the table of a direct run, before or after describing the codes."""
+    output_dir = tmp_path / "out"
+    shutil.copytree(soft_failed_dir / "metadata", output_dir / "metadata")
+    dataset_json = output_dir / "metadata" / "dataset.json"
+    if describe_first:
+        failed = dataset_json.read_bytes()
+        run_command(["hirid-meds-describe-codes", str(output_dir)])
+        assert dataset_json.read_bytes() == failed
+        assert enrichment_record(output_dir)["enriched"] is False
+    run_command(
+        ["suMEDS-enrich", str(output_dir), "--ontology-source", str(ontology_source)]
+    )
+    assert enrichment_record(output_dir)["enriched"] is True
+    expected = enriched.after_describe if describe_first else enriched.after_sumeds
+    retried = pq.read_table(output_dir / "metadata" / "codes.parquet")
+    assert pl.from_arrow(retried).equals(pl.from_arrow(expected))

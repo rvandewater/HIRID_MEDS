@@ -23,12 +23,14 @@ classifiers = [
 # breaking (MESSY syntax, runner CLI), so raise it deliberately when migrating.
 # suMEDS provides `suMEDS-extract`, which runs this ETL and then enriches its code metadata with the
 # rules registered below, and `suMEDS-enrich`. 0.6 writes the relationship names as code-to-name
-# maps; it is capped below the next minor for the same reason (its rules format and CLI are 0.x).
+# maps. 0.6.1 makes a failed enrichment a warning that keeps the ETL output (e.g. without internet),
+# and records the enrichment in `metadata/dataset.json`. It is capped below the next minor for the
+# same reason (its rules format and CLI are 0.x).
 # The others are for `hirid-meds-describe-codes`, which fills in the descriptions of literal codes
 # after the run (all three are MEDS-Extract dependencies too).
 dependencies = [
     "MEDS-extract[download]>=0.8.0,<0.9",
-    "sumeds>=0.6,<0.7",
+    "sumeds>=0.6.1,<0.7",
     "meds",
     "polars",
     "pyarrow",
