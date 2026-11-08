@@ -34,11 +34,9 @@ build() {
   local kind=$1 input=$2 output=$3
   case $kind in
     full)
-      # suMEDS-extract runs meds-extract-run and then the suMEDS enrichment of metadata/codes.parquet,
-      # and hirid-meds-describe-codes describes the literal codes, so the baseline covers the output
-      # of the documented build.
-      POLARS_ENGINE_AFFINITY=streaming uv run --frozen suMEDS-extract spec=HIRID do_download=false input_dir="$input" output_dir="$output" >&2 \
-        && uv run --frozen hirid-meds-describe-codes "$output" >&2 \
+      # The spec's sumeds_enrich post-stage enriches metadata/codes.parquet after the ETL, so the
+      # baseline covers the output of the documented one-command build.
+      POLARS_ENGINE_AFFINITY=streaming uv run --frozen meds-extract-run spec=HIRID do_download=false input_dir="$input" output_dir="$output" >&2 \
         && echo "$output"
       ;;
     *) die "unknown kind '$kind' (expected one of: $KINDS)" ;;

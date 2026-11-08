@@ -5,15 +5,39 @@ broken before: join keys of mismatched dtypes, and an `ID` that is listed under 
 Table`s. Every value in it is made up.
 """
 
-import shutil
 from datetime import datetime
 from pathlib import Path
 
 import polars as pl
 import pyarrow.parquet as pq
-from conftest import T0, run_command
+from conftest import T0
 from meds import CodeMetadataSchema
 from MEDS_extract.config import MessyConfig
+
+# The descriptions of the literal codes, which the `_self` blocks of `configs/messy.yaml` write. They
+# are exactly the ones the removed `hirid-meds-describe-codes` step filled in after the run, from
+# `metadata/static_code_descriptions.csv`.
+LITERAL_DESCRIPTIONS = {
+    "HOSPITAL_ADMISSION": (
+        "ICU admission, at general_table.admissiontime (date-shifted). HiRID covers stays in the "
+        "intensive care unit only; the code keeps the name used by earlier releases of this ETL."
+    ),
+    "HOSPITAL_DISCHARGE": (
+        "ICU discharge, placed at the stay's last observation (latest "
+        "observation_tables.datetime) because HiRID records no discharge time; the code keeps the "
+        "name used by earlier releases of this ETL."
+    ),
+    "MEDS_BIRTH": (
+        "Pseudo date of birth: general_table.admissiontime minus general_table.age in years. "
+        "HiRID reports age in bins (ages above 89 are set to 90), so the date can be off by "
+        "several years."
+    ),
+    "MEDS_DEATH": (
+        "Death in the ICU: general_table.discharge_status, the ICU (not hospital) discharge "
+        "status, is not 'alive'; a missing status is not counted. Placed at the stay's last "
+        "observation because HiRID records no time of death."
+    ),
+}
 
 
 def test_registered_spec_loads():
@@ -77,10 +101,8 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     assert "parent_codes" not in table.column_names
     by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
     assert set(meds["code"]) <= set(by_code)
-    # Literal codes have no components to attach metadata to; `hirid-meds-describe-codes` fills
-    # them in after the run (next test).
-    literal = {"HOSPITAL_ADMISSION", "HOSPITAL_DISCHARGE", "MEDS_BIRTH", "MEDS_DEATH"}
-    assert {c for c, r in by_code.items() if r["description"] is None} == literal
+    # Every code is described, the literal ones by their `_self` blocks (next test).
+    assert all(row["description"] is not None for row in by_code.values())
 
     # Id 100 is in both tables; each code is described from its own table's row only.
     hr = by_code["OBSERVATION//Heart rate///min"]
@@ -104,23 +126,13 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     )
 
 
-def test_describe_codes_fills_literal_codes(meds_dir: Path, tmp_path: Path):
-    codes_fp = tmp_path / "metadata" / "codes.parquet"
-    codes_fp.parent.mkdir()
-    shutil.copy(meds_dir / "metadata" / "codes.parquet", codes_fp)
-    before = pl.read_parquet(codes_fp)
-
-    for _ in range(2):  # idempotent
-        run_command(["hirid-meds-describe-codes", str(tmp_path)])
-
-    table = pq.read_table(codes_fp)
-    CodeMetadataSchema.validate(table)
-    after = pl.from_arrow(table)
-    assert after["code"].to_list() == before["code"].to_list()
-    assert after.columns == before.columns
-    assert after["description"].null_count() == 0
-    # Extracted descriptions and parents are untouched.
-    described = before.filter(pl.col("description").is_not_null())
-    assert after.join(described, on="code", how="semi").equals(described)
-    by_code = dict(zip(after["code"], after["description"], strict=True))
-    assert by_code["MEDS_BIRTH"].startswith("Pseudo date of birth")
+def test_literal_codes_are_described(meds_dir: Path):
+    """The `_self` blocks describe the literal codes exactly as the removed static table did."""
+    codes = pl.read_parquet(meds_dir / "metadata" / "codes.parquet")
+    literal = codes.filter(pl.col("code").is_in(list(LITERAL_DESCRIPTIONS)))
+    assert (
+        dict(zip(literal["code"], literal["description"], strict=True))
+        == LITERAL_DESCRIPTIONS
+    )
+    # A literal code with metadata also gets its template, the literal itself.
+    assert literal["code_template"].to_list() == literal["code"].to_list()

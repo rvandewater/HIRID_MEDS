@@ -41,16 +41,13 @@ pip install HIRID-MEDS
 export DATASET_DOWNLOAD_USERNAME=$PHYSIONET_USERNAME
 export DATASET_DOWNLOAD_PASSWORD=$PHYSIONET_PASSWORD
 export POLARS_ENGINE_AFFINITY=streaming  # see "Resources" below
-suMEDS-extract spec=HIRID output_dir=$MEDS_OUTPUT_DIR
-hirid-meds-describe-codes $MEDS_OUTPUT_DIR
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR
 ```
 
-[suMEDS](https://github.com/rvandewater/SumMEDS)' `suMEDS-extract` (installed with this package)
-runs the ETL with `meds-extract-run spec=HIRID`, then adds LOINC parents to
-`metadata/codes.parquet` (see
-[Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)). Arguments before a
-`--` go to `meds-extract-run`, and arguments after it go to `suMEDS-enrich`. For the plain ETL, run
-`meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR` with the same arguments.
+This one command runs the ETL and then, as its last step, adds LOINC parents to
+`metadata/codes.parquet` with [suMEDS](https://github.com/rvandewater/SumMEDS) (installed with this
+package; see [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)). For the
+plain ETL, add `skip_stages=[sumeds_enrich]`.
 
 When you run this, the program will:
 
@@ -59,16 +56,14 @@ When you run this, the program will:
     and unpack them (by default under `$MEDS_OUTPUT_DIR/.meds_extract_run/`; pass
     `download_dest_dir=$RAW_INPUT_DIR` to keep them elsewhere for later runs).
 2. Build the MEDS cohort from the unpacked files and write it to `$MEDS_OUTPUT_DIR` (`data/` and
-    `metadata/`). All transformations are declared in
+    `metadata/`), with a description of every code in `metadata/codes.parquet`. All
+    transformations are declared in
     [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml).
-3. Add LOINC parents to the observation codes in `metadata/codes.parquet` (suMEDS).
-4. Fill in the descriptions of the four literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, …) in
-    `metadata/codes.parquet`, which MEDS-Extract cannot describe (`hirid-meds-describe-codes`; see
-    [Code metadata](#code-metadata)).
+3. Add LOINC parents to the observation codes in `metadata/codes.parquet` (suMEDS), and record the
+    enrichment in `metadata/dataset.json`.
 
-The extraction is complete without steps 3 and 4. Both only fill in values that are missing, so
-the dataset's own descriptions are never replaced: the ETL describes every code but the four
-literal ones before suMEDS runs, and suMEDS cannot describe those four.
+The extraction is complete without step 3. suMEDS only adds what is missing, so the dataset's own
+descriptions are never replaced.
 
 ### Using an existing download
 
@@ -77,8 +72,7 @@ If you already have the release on disk, skip the download with `do_download=fal
 leaves them (`meds-extract-download spec=HIRID output_dir=$RAW_INPUT_DIR` stages them on its own):
 
 ```bash
-suMEDS-extract spec=HIRID output_dir=$MEDS_OUTPUT_DIR do_download=false input_dir=$RAW_INPUT_DIR
-hirid-meds-describe-codes $MEDS_OUTPUT_DIR
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR do_download=false input_dir=$RAW_INPUT_DIR
 ```
 
 ```
@@ -115,29 +109,30 @@ To parallelize the stages, pass a runner file:
 ```bash
 pip install "HIRID-MEDS[local_parallelism]"
 printf 'parallelize:\n  n_workers: 8\n  launcher: joblib\n' >runner.yaml
-suMEDS-extract spec=HIRID output_dir=$MEDS_OUTPUT_DIR do_download=false \
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR do_download=false \
 	input_dir=$RAW_INPUT_DIR stage_runner_fp=runner.yaml
 ```
 
-Run `meds-extract-run --help` for every option; `suMEDS-extract` passes them all on.
+Run `meds-extract-run --help` for every option.
 
 ## How this ETL is defined
 
 The whole ETL is one MESSY (MEDS-Extract Specification Syntax YAML) file,
 [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml). The package contains no
-ETL code and no suMEDS code; its only code is the optional `hirid-meds-describe-codes` step (see
-[Code metadata](#code-metadata)). The file declares:
+ETL code and no suMEDS code. The file declares:
 
 - **`sources:`**: where the raw data lives (the PhysioNet release, restricted to the three archives
     above, unpacked after download).
-- **`etl:`**: the dataset name and sharding options.
+- **`etl:`**: the dataset name and sharding options, the license and PhysioNet page written to
+    `metadata/dataset.json`, and the suMEDS enrichment that runs after the pipeline
+    (`post_stages`).
 - **One block per raw table**: how each row becomes one or more MEDS events, and which tables it is
     joined with.
 
 `pyproject.toml` registers the file with MEDS-Extract's `MEDS_extract.pipelines` entry-point group
 under the name `HIRID`. That registration is what makes `spec=HIRID` work. It also registers
 [`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml) under the same name in
-suMEDS's `sumeds.rules` group, which is how `suMEDS-extract spec=HIRID` finds the rules.
+suMEDS's `sumeds.rules` group, which is how the config's `sumeds_enrich` stage finds the rules.
 
 Everything the pre-0.7 `pre_MEDS.py` did is now config:
 
@@ -193,12 +188,13 @@ dictionary, joined at ETL time. The ETL adds no vocabulary parents (no `parent_c
 LOINC parents from the packaged rules file (see
 [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-| Codes                                                      | Route                                                                                                                  | Source                                                                                                                                           |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OBSERVATION//{Variable Name}//{Unit}`                     | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
-| `MEDICATION//{Variable Name}`                              | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
-| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>` | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
-| `SEX//{sex}`                                               | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
+| Codes                                                                  | Route                                                                                                                  | Source                                                                                                                                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OBSERVATION//{Variable Name}//{Unit}`                                 | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
+| `MEDICATION//{Variable Name}`                                          | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
+| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>`             | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
+| `SEX//{sex}`                                                           | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
+| `HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
 
 The dictionary is joined rather than evaluated per event because `observation_tables` has ~777M
 rows: an external `_metadata` table is read once per shard, while a `_self` value is carried on
@@ -214,23 +210,11 @@ block adds parent codes; `tests/test_etl.py` checks the extracted `codes.parquet
 fixture and validates it against `meds.CodeMetadataSchema`.
 
 **Literal codes** (`HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
-components for a `_metadata` block to join on, and the pre-existing `metadata/codes.parquet` that
-MEDS-Extract documents for this case is not read by its standard pipeline (`extract_code_metadata`
-reads the output of its prior metadata stage, `split_and_shard_subjects`, which writes no
-`codes.parquet`). `hirid-meds-describe-codes $MEDS_OUTPUT_DIR` fills them in after the run from
-[`src/HIRID_MEDS/metadata/static_code_descriptions.csv`](src/HIRID_MEDS/metadata/static_code_descriptions.csv),
-which records the source of every row (`hirid-docs`: the HiRID data structure docs; this ETL's
-config). It only writes descriptions that are null, never adds codes, is idempotent, rewrites only
-the `description` column (the suMEDS columns, such as the `parent_names` maps, keep their types),
-and validates the file against `meds.CodeMetadataSchema` before replacing it. Without it, these
-four codes stay undescribed.
-
-suMEDS also only fills null descriptions, so on a code both could describe, the step that ran first
-would win. No code is in both: suMEDS can describe a code only through the `OBSERVATION//` rules of
-the packaged rules file or through its built-in layouts, which need a `/` in the code or an existing
-`parent_codes` entry, and the four literal codes have neither. Run `hirid-meds-describe-codes` after
-`suMEDS-extract` (or after `meds-extract-run`); the order does not change the result.
-`tests/test_run_with_enrichment.py` checks that suMEDS leaves exactly these four codes undescribed.
+components for an external `_metadata` block to join on. Each carries a `_self` block with a
+constant description instead (MEDS-Extract 0.8.1 and later), which also writes the literal as its
+`code_template`. Unreleased versions of this ETL filled the same descriptions in after the run, with
+a `hirid-meds-describe-codes` step and a packaged `static_code_descriptions.csv`. Both are gone, and
+`tests/test_etl.py` checks that the descriptions are still exactly the ones that table held.
 
 ## Enriching code metadata with suMEDS
 
@@ -238,25 +222,21 @@ Vocabulary work (LOINC tables, ontology checks) lives in
 [suMEDS](https://github.com/rvandewater/SumMEDS) rather than in this ETL. The package ships the
 rules for it, [`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml), registered in
 suMEDS's `sumeds.rules` entry-point group under the same name as the MEDS-Extract spec, `HIRID`.
-That is how `suMEDS-extract spec=HIRID` finds them, and `--rules HIRID` works for any suMEDS
-command. `suMEDS-extract` replaces `metadata/codes.parquet` only once the enriched table is
-complete, and it stays valid MEDS code metadata. By default the LOINC data and the HiRID crosswalk
-come from suMEDS's versioned ontology data (sumeds-ontologies, pinned release), fetched from GitHub
-on first use and cached; no Athena download is needed. suMEDS options go after a `--`:
+The config declares suMEDS's `sumeds_enrich` stage after the canonical pipeline
+(`etl.post_stages`), so `meds-extract-run spec=HIRID` enriches the finished
+`metadata/codes.parquet` in place, and it stays valid MEDS code metadata. `--rules HIRID` works for
+any suMEDS command. By default the LOINC data and the HiRID crosswalk come from suMEDS's versioned
+ontology data (sumeds-ontologies, pinned release), fetched from GitHub on first use and cached; no
+Athena download is needed.
 
-```bash
-# Also add the LOINC Parts of the LOINC multiaxial hierarchy as parents:
-suMEDS-extract spec=HIRID output_dir=$MEDS_OUTPUT_DIR -- --loinc-hierarchy
-# Use only already cached packs (no network):
-suMEDS-extract spec=HIRID output_dir=$MEDS_OUTPUT_DIR -- --offline
-```
-
-Enrichment is on by default, and a failed enrichment (for example, on a server without internet
-access) does not fail the ETL: `metadata/codes.parquet` is left as the ETL wrote it, a warning gives
-the command to enrich it later, and the exit code is still 0. Whether a build was enriched is recorded
-in `metadata/dataset.json`, under `sumeds_enrichment.enriched`; `hirid-meds-describe-codes` leaves
-that file as it is. To enrich a build afterwards, with the same rules and options as
-`suMEDS-extract` (before or after `hirid-meds-describe-codes`; the result is the same):
+Whether a build was enriched is recorded in `metadata/dataset.json`, under
+`sumeds_enrichment.enriched`, with the rules, the suMEDS version and the coverage. Enrichment is on
+by default, and a failed enrichment (for example, on a server without internet access) does not fail
+the ETL: `metadata/codes.parquet` is left as the ETL wrote it, `dataset.json` records
+`"enriched": false` with the error, and the exit code is still 0. The warning, with the command that
+finishes the enrichment, is in `$MEDS_OUTPUT_DIR/.logs/pipeline.log`. Running `meds-extract-run`
+again does not retry it (the stage is marked done); enrich the build afterwards, with the same rules
+and options, with:
 
 ```bash
 suMEDS-enrich $MEDS_OUTPUT_DIR
@@ -264,9 +244,28 @@ suMEDS-enrich $MEDS_OUTPUT_DIR
 suMEDS-enrich $MEDS_OUTPUT_DIR --ontology-source /path/to/sumeds-ontologies/ontologies --offline
 ```
 
-To make a failed enrichment an error instead, add `-- --strict`; to skip enrichment, run
-`meds-extract-run spec=HIRID ...` instead. Running `suMEDS-extract` again on an existing output
-skips the pipeline stages that are already done and enriches again.
+The stage's options are set at run time through `overrides=`, with `++` because the overrides reach
+every stage of the pipeline:
+
+```bash
+# Without enrichment:
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR skip_stages=[sumeds_enrich]
+# Make a failed enrichment fail the run (exit code 1):
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR "overrides=['++stage_cfg.strict=true']"
+# Also add the LOINC Parts of the LOINC multiaxial hierarchy as parents:
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR "overrides=['++stage_cfg.loinc_hierarchy=true']"
+```
+
+On a cluster whose compute nodes have no internet access, fill a cache on shared storage once from a
+login node, then run offline on the compute nodes with the same cache:
+
+```bash
+export XDG_CACHE_HOME=/shared/project/cache
+# On a login node:
+suMEDS-enrich --prefetch --rules HIRID
+# On a compute node:
+meds-extract-run spec=HIRID output_dir=$MEDS_OUTPUT_DIR "overrides=['++stage_cfg.offline=true']"
+```
 
 Two crosswalk rules look up the variable name (`OBSERVATION//{Variable Name}//…`) or the raw id
 (`OBSERVATION//{variableid}//UNK`) in the `hirid/observation_loinc` crosswalk of suMEDS's versioned
@@ -277,23 +276,23 @@ the LOINC long common name in `parent_names` (a map from each parent code to its
 `vocabulary_id`/`concept_code`. The ETL already describes every observation code from the variable
 reference, so suMEDS keeps those descriptions and adds none. On HiRID 1.1.1, 67 of the 123
 observation codes get a LOINC parent and no description changes; with `--loinc-hierarchy` each of
-them also gets the 3 to 9 LOINC Parts above its term. The ETL alone does not emit these parents.
+them also gets the 3 to 9 LOINC Parts above its term (`loinc_hierarchy`, above). The ETL alone does not emit these parents.
 HiRID has no same-dataset hierarchy (no code is a coarser version of another), so the file has no
 hierarchy rules. `tests/test_sumeds_rules.py` loads the file with
 suMEDS, by path and by its registered name, and checks that every rule matches the code layouts of
-`configs/messy.yaml`; `tests/test_run_with_enrichment.py` runs `suMEDS-extract spec=HIRID` and
-`hirid-meds-describe-codes` over the test fixture against a local synthetic pack repository (no
-network). The same rules work with `suMEDS … --rules HIRID` to build a privacy-masked code catalog
+`configs/messy.yaml`; `tests/test_run_with_enrichment.py` runs `meds-extract-run spec=HIRID` over
+the test fixture against a local synthetic pack repository (no network). The same rules work with `suMEDS … --rules HIRID` to build a privacy-masked code catalog
 of the output.
 
 ## Testing
 
 `tests/conftest.py` builds a small hand-written fixture with the release's layout and dtypes.
-`tests/test_etl.py` runs `meds-extract-run` over it and checks the shared-id join, dtype
-alignment, fallback codes, text values and patient events. `tests/test_run_with_enrichment.py`
-runs `suMEDS-extract spec=HIRID` and `hirid-meds-describe-codes` over it, offline, and checks that
-the enrichment adds the LOINC parents and changes no existing description, that `dataset.json`
-records it, and that a failed enrichment keeps the plain output and can be retried. The
+`tests/test_etl.py` runs `meds-extract-run spec=HIRID skip_stages=[sumeds_enrich]` over it and
+checks the shared-id join, dtype alignment, fallback codes, text values, patient events and the
+literal-code descriptions. `tests/test_run_with_enrichment.py` runs `meds-extract-run spec=HIRID`
+over it, offline, and checks that the enrichment adds the LOINC parents and changes no existing
+description, that `dataset.json` records it, that a failed enrichment keeps the plain output and can
+be retried, and that skipping the stage gives the plain ETL. The
 [synthetic ETL workflow](.github/workflows/synthetic-etl.yaml) also generates raw files straight
 from the config with [MESSY-synth](https://github.com/rvandewater/MESSY_synth) and fails if any
 event block yields no events.
@@ -308,13 +307,12 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development and release workflo
 synthetic ETL locally:
 
 ```bash
-# MESSY-synth still requires MEDS-Extract < 0.8 and its `_table.join` spelling, so it runs in its
-# own environment on a copy of the config with `joins:` spelled `join:` (one target per table).
-sed 's/^    joins:$/    join:/' src/HIRID_MEDS/configs/messy.yaml >messy_0.7.yaml
+# MESSY-synth still requires MEDS-Extract < 0.8, so it runs in its own environment on a copy of the
+# config that 0.7 reads (see scripts/messy_synth_config.py).
+uv run python scripts/messy_synth_config.py src/HIRID_MEDS/configs/messy.yaml messy_0.7.yaml
 uvx --from "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219" \
     MESSY-synth ./messy_0.7.yaml -o raw_synthetic/ --explain
 uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_synthetic do_download=false
-uv run hirid-meds-describe-codes ./HIRID_meds_synth
 ```
 
 ## Summary statistics
@@ -327,8 +325,8 @@ coverage, the splits and the schema. It names no code and reports no cell of few
 no minimum or maximum, which is what makes it safe to publish. Because it is committed next to the ETL,
 its diff shows what an ETL change did to the output, and two ETL versions can be compared without
 access to the data. `scripts/summary_stats.sh` builds the release the documented way, with
-`suMEDS-extract spec=HIRID` and `hirid-meds-describe-codes`, so the code-metadata coverage includes
-the suMEDS enrichment and the literal-code descriptions.
+`meds-extract-run spec=HIRID`, so the code-metadata coverage includes the suMEDS enrichment and the
+literal-code descriptions.
 
 Regenerate it in every pull request that changes the output, from a build of that branch:
 

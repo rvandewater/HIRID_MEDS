@@ -1,4 +1,4 @@
-"""A tiny hand-written HiRID-shaped fixture, and the plain ETL run over it.
+"""A tiny hand-written HiRID-shaped fixture, and the plain ETL run over it (without suMEDS).
 
 The fixture mirrors the real HiRID 1.1.1 layout and dtypes (raw_stage parquet with Int32 ids and
 native timestamps; reference_data CSVs at the input root), because that is where this config has
@@ -17,8 +17,8 @@ import pytest
 
 T0 = datetime(2150, 1, 1, 8, 0)
 
-# The console scripts of this environment (meds-extract-run, suMEDS-extract, ...). They shell out
-# to further scripts (MEDS_transform-stage, meds-extract-run), which must be on PATH too.
+# The console scripts of this environment (meds-extract-run, suMEDS-enrich, ...). They shell out
+# to further scripts (MEDS_transform-stage, meds-extract-download), which must be on PATH too.
 BIN_DIR = Path(sys.executable).parent
 
 
@@ -119,7 +119,7 @@ def raw_dir(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="session")
 def meds_dir(tmp_path_factory, raw_dir: Path) -> Path:
-    """The output of the plain ETL, `meds-extract-run spec=HIRID`, over the fixture."""
+    """The plain ETL over the fixture: `meds-extract-run spec=HIRID skip_stages=[sumeds_enrich]`."""
     out = tmp_path_factory.mktemp("hirid") / "out"
     run_command(
         [
@@ -128,6 +128,7 @@ def meds_dir(tmp_path_factory, raw_dir: Path) -> Path:
             f"output_dir={out}",
             f"input_dir={raw_dir}",
             "do_download=false",
+            "skip_stages=[sumeds_enrich]",
         ]
     )
     return out

@@ -9,12 +9,11 @@ export DATASET_DOWNLOAD_USERNAME=$PHYSIONET_USERNAME
 export DATASET_DOWNLOAD_PASSWORD=$PHYSIONET_PASSWORD
 export POLARS_ENGINE_AFFINITY=streaming
 
-suMEDS-extract spec=HIRID output_dir=$ROOT_OUTPUT_DIR
-hirid-meds-describe-codes $ROOT_OUTPUT_DIR
+meds-extract-run spec=HIRID output_dir=$ROOT_OUTPUT_DIR
 ```
 
-`suMEDS-extract` runs `meds-extract-run spec=HIRID` and then enriches the code metadata with the
-packaged suMEDS rules; `meds-extract-run` alone runs the plain ETL (see the README).
+This runs the ETL and then, in the config's `sumeds_enrich` post-stage, enriches the code metadata
+with the packaged suMEDS rules; `skip_stages=[sumeds_enrich]` runs the plain ETL (see the README).
 
 ## What the 0.7 layout looks like
 
