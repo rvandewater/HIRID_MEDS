@@ -44,18 +44,13 @@ jobs:
         run: uv sync --locked
 
       - name: Generate synthetic data
-        # MESSY-synth has no release for MEDS-Extract 0.8 yet: it requires MEDS-Extract <0.8 and
-        # loads the config with 0.7. So it runs in a tool environment of its own, on a copy of the
-        # config that 0.7 reads (scripts/messy_synth_config.py): `joins:` spelled `join:`, without
-        # the 0.8.1 `etl:` keys (the post-stage, the dataset.json fields), and without the `_self`
-        # blocks of the literal codes. The variable-reference join is keyed on derived columns (a
-        # `Source Table` literal and a cast id). Released MESSY_synth cannot adopt join keys through
-        # those; pin the commit that can (mmcdermott/MESSY_synth#12) until it is merged and released.
+        # MESSY_synth 0.1.0 loads the config with MEDS-Extract 0.8 and adopts join keys through
+        # derived columns (mmcdermott/MESSY_synth#16), which the variable-reference join is keyed on
+        # (a `Source Table` literal and a cast id). So it reads the shipped config, by its registered
+        # name, in the project environment: with the locked MEDS-Extract the extraction runs on.
         run: |
-          uv run --locked python scripts/messy_synth_config.py src/HIRID_MEDS/configs/messy.yaml messy_0.7.yaml
-          uvx --python ${{ matrix.python-version }} \
-            --from "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219" \
-            MESSY-synth ./messy_0.7.yaml -o raw_synthetic/ --explain
+          uv pip install --python .venv/bin/python "MESSY_synth==0.1.0"
+          uv run --locked MESSY-synth HIRID -o raw_synthetic/ --explain
 
       - name: Extract synthetic data
         # The extraction runs the shipped config with this project's locked MEDS-Extract, as the

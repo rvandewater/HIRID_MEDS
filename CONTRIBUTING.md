@@ -97,7 +97,7 @@ runs two checks that need no real data:
     with the release's layout and dtypes, and checks specific values (the shared-id join, dtype
     alignment, fallback codes, text values, patient events).
 - The [synthetic ETL workflow](.github/workflows/synthetic-etl.yaml) generates raw files straight
-    from the config with [MESSY-synth](https://github.com/rvandewater/MESSY_synth) and fails if
+    from the config with [MESSY-synth](https://github.com/mmcdermott/MESSY_synth) and fails if
     any event yields no rows.
 
 Changes that affect the output should also be validated by running the ETL over the real release
