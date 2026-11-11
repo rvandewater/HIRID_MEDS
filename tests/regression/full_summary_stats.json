@@ -204,10 +204,9 @@
     }
   },
   "dataset": {
-    "created_at": "2026-11-08T00:54:50.221845+00:00",
+    "created_at": "2026-11-11T00:42:29.284479+00:00",
     "dataset_name": "hirid",
-    "dataset_version": "1.1.1:0.1.0",
-    "description_uri": "https://physionet.org/content/hirid/1.1.1/",
+    "dataset_version": "1.1.1:0.1.1",
     "etl_name": "MEDS_transforms",
     "etl_version": "0.7.0",
     "license": "PhysioNet Contributor Review Health Data License 1.5.0",
@@ -284,8 +283,8 @@
       "data/tuning/1.parquet": "sha256:9eadffc134346666dd6e1b8362394fc110e8366ff108d70cacf41164479c2bdb",
       "data/tuning/2.parquet": "sha256:9a2511e12f7ae0d3b774d961df565ebdcb0f5c500b46b8867b82a529d8214e9d",
       "data/tuning/3.parquet": "sha256:b8f6676b659f2b37c22d7ddc355e67b507844c686a9d5c158282509e2c0cb493",
-      "metadata/codes.parquet": "sha256:98206866dedcb92161c6028dcfc39cc5b5216e37e6b5aaeb9d088abcdfcabfd4",
-      "metadata/dataset.json": "sha256:63f0460bd8f205fa0022911f52f2a8a85d4d8c1d1feddb2c0a7dfcc13cd130ea",
+      "metadata/codes.parquet": "sha256:add6d8fbab892082b8265dc13a2d11421bb4c6460743652a2fbe73c8fc026164",
+      "metadata/dataset.json": "sha256:074b94df9028153cf4d6f673193c8f5d4035ce2419b47d1c6451840bb2ddb8b9",
       "metadata/subject_splits.parquet": "sha256:339349d2380839e0e3ccbbf402d67f2ad0ea60368d54535bf6003d7bd20165ce"
     },
     "code_metadata": "sha256:cdbbde3b697a99b5fd7d3a114526a2a211ff478d3ef499f14ac0814c00435d08",
@@ -294,12 +293,12 @@
       "digest": "sha256:675b741d61eee10e82d2536ba8241cb575cb411df87a747c7ee9c81cf58f52e0",
       "n_files": 36
     },
-    "dataset_metadata": "sha256:e5c19573fcfdd555c21d6f2abc6c79de161d444144f825c5b9259a9f920d7f4e",
+    "dataset_metadata": "sha256:9678a1b833233ddb69c05ad059fb24755b1ff3d1a81f488eebe766de0d2e9167",
     "method": "files",
     "n_files": 39,
     "subject_splits": "sha256:aad1a8e9fc36598f58380165492935b17f5471fc3ada6286d2df80349bff6aa8"
   },
-  "extracted_at": "2026-11-08T00:57:13.510244",
+  "extracted_at": "2026-11-11T00:44:18.735855",
   "layout": {
     "code_metadata_columns": {
       "code": "String",
@@ -379,8 +378,22 @@
     ],
     "shard_names_digest": "sha256:1a762c8f5cee75cfdfaa1849e9c361cd7dafb3d1e64cc9f2eefb1cfa4af3064c"
   },
-  "meds_summary_stats_version": "0.0.3",
+  "meds_summary_stats_version": "0.0.4",
   "per_subject": {
+    "measurements_per_day": {
+      "mean": 8717.94,
+      "n": 33897,
+      "quantiles": {
+        "p1": 1888.45,
+        "p25": 5493.36,
+        "p5": 3513.34,
+        "p50": 8632.07,
+        "p75": 11269.8,
+        "p95": 15472.8,
+        "p99": 18983.6
+      },
+      "std": 3865.74
+    },
     "n_events": {
       "mean": 9597.48,
       "n": 33905,
@@ -458,7 +471,7 @@
     "n_subjects_in_splits_without_data": 0,
     "present": true
   },
-  "stats_schema_version": 1,
+  "stats_schema_version": 2,
   "time": {
     "by_year": {
       "2024": {
