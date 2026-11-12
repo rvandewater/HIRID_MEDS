@@ -294,7 +294,7 @@ over it, offline, and checks that the enrichment adds the LOINC parents and chan
 description, that `dataset.json` records it, that a failed enrichment keeps the plain output and can
 be retried, and that skipping the stage gives the plain ETL. The
 [synthetic ETL workflow](.github/workflows/synthetic-etl.yaml) also generates raw files straight
-from the config with [MESSY-synth](https://github.com/rvandewater/MESSY_synth) and fails if any
+from the config with [MESSY-synth](https://github.com/mmcdermott/MESSY_synth) and fails if any
 event block yields no events.
 
 ```bash
@@ -307,11 +307,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development and release workflo
 synthetic ETL locally:
 
 ```bash
-# MESSY-synth still requires MEDS-Extract < 0.8, so it runs in its own environment on a copy of the
-# config that 0.7 reads (see scripts/messy_synth_config.py).
-uv run python scripts/messy_synth_config.py src/HIRID_MEDS/configs/messy.yaml messy_0.7.yaml
-uvx --from "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219" \
-    MESSY-synth ./messy_0.7.yaml -o raw_synthetic/ --explain
+uv pip install "MESSY_synth==0.1.0"
+uv run MESSY-synth HIRID -o raw_synthetic/ --explain
 uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_synthetic do_download=false
 ```
 

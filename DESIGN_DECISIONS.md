@@ -68,9 +68,9 @@ integer types, and MEDS-Extract 0.7.1 does not align them. In HiRID the raw parq
 (`patientid`, `variableid`, `pharmaid`) are `Int32`, while the CSV-derived reference tables are
 inferred as `Int64`. The config therefore joins on derived, cast keys (`_ref_id: $variableid::int64`,
 `_obs_patientid: $patientid::int32`). This ties the config to the release's dtypes. MESSY-synth
-generates matching dtypes for these derived keys as of
-[mmcdermott/MESSY_synth#12](https://github.com/mmcdermott/MESSY_synth/pull/12), which the synthetic
-CI workflow pins ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)).
+generates matching dtypes for these derived keys as of 0.1.0
+([mmcdermott/MESSY_synth#16](https://github.com/mmcdermott/MESSY_synth/pull/16)), which the synthetic
+CI workflow installs ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)).
 
 ### D3. Unreferenced ids fall back to the raw id in the code
 
@@ -178,9 +178,9 @@ Each has a GitHub issue with the options and the data behind them.
     `pharma_records.recordstatus`/`typeid`/`infusionid` are ignored, as before. Some of these likely
     mark invalidated or corrected records.
 - **`UNK` placeholders** ([#6](https://github.com/rvandewater/HIRID_MEDS/issues/6), D11): keep `UNK` for "no unit", or omit the component?
-- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow pins an unmerged MESSY_synth commit
-    ([mmcdermott/MESSY_synth#12](https://github.com/mmcdermott/MESSY_synth/pull/12)); move the pin
-    to a release once it lands. `tests/test_etl.py` checks specific values on a hand-written fixture.
+- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow installs MESSY_synth 0.1.0
+    and generates from the shipped config. `tests/test_etl.py` checks specific values on a
+    hand-written fixture.
 
 ## Validation
 
