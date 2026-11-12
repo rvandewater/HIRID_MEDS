@@ -1,11 +1,8 @@
-"""The `_metadata` blocks of the MESSY config and the packaged static table stay in step."""
+"""Every event of the MESSY config declares how its codes are described."""
 
 from pathlib import Path
 
-import polars as pl
 import yaml
-
-from HIRID_MEDS.code_descriptions import STATIC_DESCRIPTIONS_CSV
 
 ROOT = Path(__file__).parents[1] / "src" / "HIRID_MEDS"
 CONFIG_FP = ROOT / "configs" / "messy.yaml"
@@ -50,11 +47,13 @@ def test_no_block_adds_vocabulary_parents():
     assert not with_parents, with_parents
 
 
-def test_static_table_covers_exactly_the_literal_codes():
-    static = pl.read_csv(STATIC_DESCRIPTIONS_CSV.read_bytes(), infer_schema=False)
-    assert static.columns == ["code", "description", "source"]
-    assert static.null_count().sum_horizontal().item() == 0
-    assert not static["code"].is_duplicated().any()
-    literal = {str(e["code"]) for _, _, e in _events() if _is_literal(str(e["code"]))}
+def test_literal_coded_events_declare_a_constant_description():
+    """A literal code has no components, so its description is a constant `_self` block."""
+    literal = [(t, n, e) for t, n, e in _events() if _is_literal(str(e["code"]))]
     assert literal, "no literal-coded events found; the detection is stale"
-    assert set(static["code"]) == literal
+    for table, name, event in literal:
+        description = event.get("_metadata", {}).get("_self", {}).get("description")
+        assert description, f"{table}/{name}"
+        # A quoted dftly string literal, the same on every row.
+        assert description[0] == description[-1] == '"', f"{table}/{name}"
+        assert "$" not in description, f"{table}/{name}"

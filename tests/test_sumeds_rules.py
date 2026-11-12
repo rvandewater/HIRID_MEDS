@@ -1,7 +1,8 @@
 """The packaged suMEDS rules file loads in suMEDS and matches the codes this ETL writes.
 
 suMEDS (https://github.com/rvandewater/SumMEDS) reads `src/HIRID_MEDS/sumeds_rules.yaml` to add
-LOINC parents to `metadata/codes.parquet`. Its strict loader (`sumeds.load_rules`) validates the
+LOINC parents to `metadata/codes.parquet`; the package registers it in suMEDS's `sumeds.rules`
+entry-point group under its MEDS-Extract spec name, `HIRID`. Its strict loader (`sumeds.load_rules`) validates the
 file, and the crosswalk keys come from the rule objects its enrichment uses, so these checks only
 state which key each HiRID code is looked up by. The crosswalk table itself is not fetched. The
 example codes come from evaluating the code templates of `configs/messy.yaml`, so a change to a
@@ -15,7 +16,7 @@ from pathlib import Path
 import polars as pl
 import yaml
 from dftly import Parser
-from sumeds import load_rules
+from sumeds import load_rules, registered_rules
 from sumeds.ontology import CrosswalkRule
 
 RULES = files("HIRID_MEDS") / "sumeds_rules.yaml"
@@ -46,6 +47,14 @@ def test_rules_load_in_sumeds():
 def test_rules_are_package_data():
     pyproject = (Path(__file__).parents[1] / "pyproject.toml").read_text()
     assert '"sumeds_rules.yaml"' in pyproject
+    assert RULES.is_file()
+
+
+def test_rules_are_registered_under_the_spec_name():
+    """`suMEDS-extract spec=HIRID` and `--rules HIRID` find the rules by this entry point."""
+    assert "HIRID" in registered_rules()
+    assert registered_rules()["HIRID"] == "HIRID_MEDS:sumeds_rules.yaml"
+    assert load_rules("HIRID") == load_rules(Path(str(RULES)))
 
 
 def test_observation_rules_match_the_config_layout():

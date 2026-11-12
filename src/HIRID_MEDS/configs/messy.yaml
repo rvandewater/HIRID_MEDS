@@ -1,4 +1,4 @@
-# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.7).
+# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.8).
 #
 # This single file replaces what used to be spread across four places:
 #   - `dataset.yaml`          -> the `sources:` block below
@@ -34,6 +34,16 @@ sources:
 etl:
   dataset_name: hirid
   n_subjects_per_shard: 1000
+  # Written to metadata/dataset.json (from https://physionet.org/content/hirid/1.1.1/).
+  license: PhysioNet Contributor Review Health Data License 1.5.0
+  description_uri: https://physionet.org/content/hirid/1.1.1/
+  # After the canonical pipeline, suMEDS (a dependency of this package) adds LOINC parents to
+  # metadata/codes.parquet with the rules registered as HIRID (sumeds_rules.yaml), and records the
+  # enrichment in metadata/dataset.json. A failed enrichment (e.g. without internet access) keeps
+  # codes.parquet as the ETL wrote it and does not fail the run; `suMEDS-enrich OUTPUT_DIR` finishes
+  # it later. `skip_stages=[sumeds_enrich]` leaves it out of a run.
+  post_stages:
+    - sumeds_enrich: { rules: HIRID }
 
 _defaults:
   subject_id: $patientid
@@ -51,9 +61,10 @@ _defaults:
 #   - a `_self` block, evaluated on the event's own rows. It is used for `SEX//...` and for the
 #     fallback codes of ids without a reference entry, where it is null on every other row.
 #
-# Literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no block can
-# describe them; `hirid-meds-describe-codes` fills them in after the run, from
-# `metadata/static_code_descriptions.csv`.
+# Literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no external block
+# can join onto them. Each carries a `_self` block with a constant description instead (MEDS-Extract
+# >= 0.8.1), and a comment above it names the HiRID documentation it paraphrases. These are the
+# descriptions the `hirid-meds-describe-codes` step used to fill in after the run.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -76,7 +87,7 @@ _defaults:
 
 general_table:
   _table:
-    join:
+    joins:
       raw_stage/observation_tables/parquet:
         left_on: _obs_patientid
         right_on: patientid
@@ -91,6 +102,14 @@ general_table:
   admission:
     code: HOSPITAL_ADMISSION
     time: $_admitted
+    _metadata:
+      _self:
+        # hirid-docs: general_table.admissiontime, one patientid per ICU admission
+        # (https://hirid.intensivecare.ai/structure-of-the-published-data,
+        # https://hirid.intensivecare.ai/data-details).
+        description: >-
+          "ICU admission, at general_table.admissiontime (date-shifted). HiRID covers stays in the
+          intensive care unit only; the code keeps the name used by earlier releases of this ETL."
   sex:
     code: 'f"SEX//{$sex ?? ''UNK''}"'
     time: null
@@ -102,12 +121,35 @@ general_table:
   birth:
     code: MEDS_BIRTH
     time: $date_of_birth
+    _metadata:
+      _self:
+        # hirid-docs: general_table.age, age at admission, above 89 set to 90
+        # (https://hirid.intensivecare.ai/structure-of-the-published-data); DESIGN_DECISIONS.md D8.
+        description: >-
+          "Pseudo date of birth: general_table.admissiontime minus general_table.age in years. HiRID
+          reports age in bins (ages above 89 are set to 90), so the date can be off by several
+          years."
   death:
     code: MEDS_DEATH
     time: $date_of_death
+    _metadata:
+      _self:
+        # hirid-docs: general_table.discharge_status, ICU discharge alive or dead
+        # (https://hirid.intensivecare.ai/structure-of-the-published-data); DESIGN_DECISIONS.md D8.
+        description: >-
+          "Death in the ICU: general_table.discharge_status, the ICU (not hospital) discharge status,
+          is not 'alive'; a missing status is not counted. Placed at the stay's last observation
+          because HiRID records no time of death."
   discharge:
     code: HOSPITAL_DISCHARGE
     time: $datetime
+    _metadata:
+      _self:
+        # DESIGN_DECISIONS.md D8; README Data notes (issue #4).
+        description: >-
+          "ICU discharge, placed at the stay's last observation (latest observation_tables.datetime)
+          because HiRID records no discharge time; the code keeps the name used by earlier releases
+          of this ETL."
 
 # ---------------------------------------------------------------------------
 # The two raw_stage tables are parquet with native timestamp columns, so `time` needs no cast.
@@ -130,7 +172,7 @@ general_table:
 
 raw_stage/pharma_records/parquet:
   _table:
-    join:
+    joins:
       hirid_variable_reference:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]
@@ -159,7 +201,7 @@ raw_stage/pharma_records/parquet:
 
 raw_stage/observation_tables/parquet:
   _table:
-    join:
+    joins:
       hirid_variable_reference:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]

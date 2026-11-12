@@ -3,7 +3,7 @@ name: Synthetic ETL for MESSY files using MESSY_synth
 # Generates raw files straight from the shipped MESSY config with MESSY-synth and runs the ETL over
 # them. MESSY-synth validates that every event block yields events and fails the job otherwise, so
 # this catches expressions that only work on the dtypes of one particular release. It complements
-# the hand-written fixture in tests/test_etl.py, which checks specific values.
+# the hand-written fixture in tests/conftest.py, which tests/test_etl.py checks value by value.
 
 on:
   push:
@@ -41,19 +41,25 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: |
-          uv sync --locked
-          # The variable-reference join is keyed on derived columns (a `Source Table` literal and a
-          # cast id). Released MESSY_synth cannot adopt join keys through those; pin the commit
-          # that can (mmcdermott/MESSY_synth#12) until it is merged and released.
-          uv pip install "MESSY_synth @ git+https://github.com/rvandewater/MESSY_synth@de7a888d1045e943aabb218bcf83d2e83f4d3219"
+        run: uv sync --locked
 
-      - name: Generate and extract synthetic data
+      - name: Generate synthetic data
+        # MESSY_synth 0.1.0 loads the config with MEDS-Extract 0.8 and adopts join keys through
+        # derived columns (mmcdermott/MESSY_synth#16), which the variable-reference join is keyed on
+        # (a `Source Table` literal and a cast id). So it reads the shipped config, by its registered
+        # name, in the project environment: with the locked MEDS-Extract the extraction runs on.
         run: |
-          uv run --no-sync MESSY-synth ./src/HIRID_MEDS/configs/messy.yaml -o raw_synthetic/ --explain
-          uv run --no-sync meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth \
+          uv pip install --python .venv/bin/python "MESSY_synth==0.1.0"
+          uv run --locked MESSY-synth HIRID -o raw_synthetic/ --explain
+
+      - name: Extract synthetic data
+        # The extraction runs the shipped config with this project's locked MEDS-Extract, as the
+        # README documents it: the ETL, then the suMEDS enrichment stage, which records whether it
+        # enriched in dataset.json (a failed enrichment would not fail the run).
+        run: |
+          uv run --locked meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth \
             input_dir=raw_synthetic do_download=false
-          uv run --no-sync hirid-meds-describe-codes ./HIRID_meds_synth
           for f in dataset.json codes.parquet subject_splits.parquet; do
             test -f "HIRID_meds_synth/metadata/$f"
           done
+          jq -e '.sumeds_enrichment | has("enriched")' HIRID_meds_synth/metadata/dataset.json

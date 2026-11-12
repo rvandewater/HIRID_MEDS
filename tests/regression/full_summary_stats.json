@@ -1,26 +1,85 @@
 {
   "code_metadata": {
     "description_length": {
-      "mean": 117.495,
-      "n": 650,
+      "mean": 117.946,
+      "n": 654,
       "quantiles": {
-        "p1": 100.49,
+        "p1": 100.53,
         "p25": 111.0,
         "p5": 106.0,
         "p50": 114.0,
-        "p75": 120.0,
-        "p95": 139.55,
-        "p99": 169.04
+        "p75": 121.0,
+        "p95": 141.0,
+        "p99": 177.35
       },
-      "std": 13.1722
+      "std": 14.3925
     },
     "n_codes": 654,
     "n_data_codes_missing_from_metadata": 0,
     "n_metadata_codes_absent_from_data": 0,
-    "n_with_description": 650,
-    "n_with_parent_codes": null,
+    "n_with_description": 654,
+    "n_with_parent_codes": 67,
     "ontology": {
-      "present": false
+      "by_vocabulary": {
+        "LOINC": {
+          "keys_digest": "sha256:d789eacd4f5b958e231bd608999f48e663614ea1ccd5dd54df7dfa5ac4155876",
+          "n_child_codes": 67,
+          "n_distinct_keys": 67,
+          "n_measurements": 146884921,
+          "n_subjects": 33903,
+          "numeric": {
+            "mean": 186.26,
+            "n_finite": 146860522,
+            "std": 784.078
+          },
+          "recognized": true
+        }
+      },
+      "coverage": {
+        "frac_measurements_mapped": 0.189519,
+        "frac_observed_codes_with_parents": 0.102446,
+        "n_measurements_mapped": 146884921,
+        "n_measurements_unmapped": 628156046,
+        "n_observed_codes": 654,
+        "n_observed_codes_with_parents": 67,
+        "n_observed_codes_without_parents": 587
+      },
+      "n_codes_in_multiple_vocabularies": 0,
+      "n_codes_with_parents": 67,
+      "n_distinct_parents": 67,
+      "n_parent_links": 67,
+      "n_parents_without_vocabulary": 0,
+      "n_vocabularies": 1,
+      "n_vocabularies_recognized": 1,
+      "parents_per_code": {
+        "mean": 0.102446,
+        "n": 654,
+        "quantiles": {
+          "p1": 0.0,
+          "p25": 0.0,
+          "p5": 0.0,
+          "p50": 0.0,
+          "p75": 0.0,
+          "p95": 1.0,
+          "p99": 1.0
+        },
+        "std": 0.303467
+      },
+      "present": true,
+      "vocabularies_per_code": {
+        "mean": 0.102446,
+        "n": 654,
+        "quantiles": {
+          "p1": 0.0,
+          "p25": 0.0,
+          "p5": 0.0,
+          "p50": 0.0,
+          "p75": 0.0,
+          "p95": 1.0,
+          "p99": 1.0
+        },
+        "std": 0.303467
+      }
     },
     "present": true,
     "vocabulary_digest": "sha256:a05670f6d5295e769251eecead117a93d2bdf3d61c1d6e846992cf225ebc2847"
@@ -150,8 +209,41 @@
     "dataset_version": "1.1.1:0.1.1",
     "etl_name": "MEDS_transforms",
     "etl_version": "0.7.0",
+    "license": "PhysioNet Contributor Review Health Data License 1.5.0",
     "meds_version": "0.4.1",
-    "present": true
+    "other_extension_columns": [
+      "source_block"
+    ],
+    "present": true,
+    "sumeds_enrichment": {
+      "athena": false,
+      "coverage": {
+        "codes": 654,
+        "described": [
+          654,
+          654
+        ],
+        "with_parent_codes": [
+          0,
+          67
+        ]
+      },
+      "enriched": true,
+      "enriched_at": "2026-11-08T00:56:16Z",
+      "ontology_source": "rvandewater/sumeds-ontologies@v0.2.0",
+      "options": {
+        "child_codes": false,
+        "child_depth": 3,
+        "exclude_self_parent_code": false,
+        "loinc_hierarchy": false,
+        "packs": true,
+        "parent_codes": true,
+        "sibling_codes": false
+      },
+      "rules": "HIRID",
+      "rules_sha256": "7d83c87be19bc7858db92d6f2dcd85a51832e492f9d3586c68f43940df354909",
+      "sumeds_version": "0.6.2"
+    }
   },
   "dataset_digest": {
     "by_file": {
@@ -195,8 +287,8 @@
       "metadata/dataset.json": "sha256:074b94df9028153cf4d6f673193c8f5d4035ce2419b47d1c6451840bb2ddb8b9",
       "metadata/subject_splits.parquet": "sha256:339349d2380839e0e3ccbbf402d67f2ad0ea60368d54535bf6003d7bd20165ce"
     },
-    "code_metadata": "sha256:2d3a238e82da351a770ebd0106685a27bd0ebd568c796033a842de65f5e7425d",
-    "combined": "sha256:2d169ccb42a8665e15678b77ef7a5b7cddc451b3a2dbfe03f4f1c7a64a4b4516",
+    "code_metadata": "sha256:cdbbde3b697a99b5fd7d3a114526a2a211ff478d3ef499f14ac0814c00435d08",
+    "combined": "sha256:25cafa0ab27eb3c82f6eaf7f2cda4e90efae1e64340e10f76cb01d2f872b3f0f",
     "data": {
       "digest": "sha256:675b741d61eee10e82d2536ba8241cb575cb411df87a747c7ee9c81cf58f52e0",
       "n_files": 36
@@ -211,7 +303,14 @@
     "code_metadata_columns": {
       "code": "String",
       "code_template": "String",
-      "description": "String"
+      "concept_code": "String",
+      "concept_id": "Int64",
+      "description": "String",
+      "domain_id": "String",
+      "parent_codes": "List(String)",
+      "parent_names": "Map(String, String)",
+      "standard_concept": "String",
+      "vocabulary_id": "String"
     },
     "column_dtype_conflicts": {},
     "column_presence": {
