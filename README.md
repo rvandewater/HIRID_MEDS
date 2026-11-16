@@ -180,7 +180,7 @@ the full-run validation.
 
 ## Code metadata
 
-`metadata/codes.parquet` carries `code`, `description` and `code_template`.
+`metadata/codes.parquet` carries `code`, `description`, `unit` and `code_template`.
 Releases up to 0.1.0 wrote no metadata (0.1.0 writes only `code`; 0.0.x wrote an empty string as
 every description), which gives tooling that maps codes across datasets or builds features from
 descriptions nothing to work with. The descriptions now come from the release's own variable
@@ -195,6 +195,14 @@ LOINC parents from the packaged rules file (see
 | `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>`             | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
 | `SEX//{sex}`                                                           | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
 | `HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
+
+**Units.** The `unit` column (List(String), as MEDS-Extract writes extra metadata) holds each
+code's unit as recorded, so tools can read it without parsing the code; the codes keep their unit
+segment unchanged. `OBSERVATION` codes get the `Unit` of their variableid in
+`hirid_variable_reference` (the same external block as the description; null for unitless
+variables and ids without a reference entry). `MEDICATION` codes get the `doseunit` of their own
+rows (a `_self` block), because the reference's `Unit` is empty for every `Pharma` row; a drug name
+shared by pharmaids with different dose units gets the list of both.
 
 The dictionary is joined rather than evaluated per event because `observation_tables` has ~777M
 rows: an external `_metadata` table is read once per shard, while a `_self` value is carried on

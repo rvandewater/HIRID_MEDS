@@ -65,7 +65,7 @@ def test_observation_rules_match_the_config_layout():
         {
             "variable_name": [*names, None],
             "variableid": [*ids, 300],
-            "unit": ["/min", "mmol/l", None],
+            "Unit": ["/min", "mmol/l", None],
         },
         {"variableid": pl.Int32},
     )

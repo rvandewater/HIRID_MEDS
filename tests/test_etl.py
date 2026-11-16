@@ -136,3 +136,22 @@ def test_literal_codes_are_described(meds_dir: Path):
     )
     # A literal code with metadata also gets its template, the literal itself.
     assert literal["code_template"].to_list() == literal["code"].to_list()
+
+
+def test_code_units(meds_dir: Path):
+    """Each code's unit is in `codes.parquet`; the units in the codes themselves are unchanged."""
+    codes = pl.read_parquet(meds_dir / "metadata" / "codes.parquet")
+    # MEDS-Extract writes extra metadata columns as List(String).
+    assert codes.schema["unit"] == pl.List(pl.String)
+    units = dict(zip(codes["code"], codes["unit"].to_list(), strict=True))
+    # Observation codes: the reference `Unit` of the variableid, only from its Observation row.
+    assert units["OBSERVATION//Heart rate///min"] == ["/min"]
+    assert units["OBSERVATION//Lab A//mmol/l"] == ["mmol/l"]
+    # A unitless variable and an id without a reference entry have no unit.
+    assert units["OBSERVATION//GCS//UNK"] is None
+    assert units["OBSERVATION//999//UNK"] is None
+    # Medication codes: the `doseunit` recorded on the drug's own rows.
+    assert units["MEDICATION//Drug A"] == ["mg"]
+    assert units["MEDICATION//Drug B"] == ["ml"]
+    assert units["SEX//F"] is None
+    assert units["HOSPITAL_ADMISSION"] is None

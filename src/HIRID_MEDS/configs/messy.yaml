@@ -165,9 +165,11 @@ general_table:
 # observation and 2 pharma ids). Their code falls back to the raw id, so they stay distinct
 # rather than all collapsing into one `UNK` code.
 #
-# The reference's `Variable Name` / `Unit` columns contain spaces, which dftly's `$name` shorthand
-# cannot express; the explicit `{column: ...}` form can, so `_table.cols` aliases them once.
-# See https://github.com/mmcdermott/dftly/issues/96.
+# The reference's `Variable Name` column contains a space, which dftly's `$name` shorthand cannot
+# express; the explicit `{column: ...}` form can, so `_table.cols` aliases it once.
+# See https://github.com/mmcdermott/dftly/issues/96. `Unit` needs no alias and the observation code
+# reads it as `$Unit`: a code component named `unit` would turn the metadata output `unit` below
+# into a join key (MEDS-Extract treats a `_metadata` entry named like a component as a key).
 # ---------------------------------------------------------------------------
 
 raw_stage/pharma_records/parquet:
@@ -182,7 +184,9 @@ raw_stage/pharma_records/parquet:
       _ref_id: "$pharmaid::int64"
       variable_name: { column: Variable Name }
   # The dose unit is recorded on every pharma row (`doseunit`), so it is taken from there rather
-  # than from the reference table's `Unit`.
+  # than from the reference table's `Unit` (empty for every `Pharma` row). It is also the code's
+  # `unit` metadata, read from the event's own rows (`_self`); a code whose rows record more than
+  # one dose unit (two pharmaids sharing a name) gets the list of them.
   medication:
     code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}"'
     time: $givenat
@@ -198,6 +202,7 @@ raw_stage/pharma_records/parquet:
         description: >-
           f"HiRID pharmaid {$pharmaid} without a Pharma entry in hirid_variable_reference (name
           unknown)" if ($variable_name ?? "") == ""
+        unit: $doseunit
 
 raw_stage/observation_tables/parquet:
   _table:
@@ -210,11 +215,10 @@ raw_stage/observation_tables/parquet:
       _ref_table: "'Observation'"
       _ref_id: "$variableid::int64"
       variable_name: { column: Variable Name }
-      unit: { column: Unit }
   # `stringvalue` is an empty string (not null) on almost every numeric row; only a real string
   # is kept as the text value.
   observation:
-    code: 'f"OBSERVATION//{$variable_name ?? $variableid::str}//{$unit ?? ''UNK''}"'
+    code: 'f"OBSERVATION//{$variable_name ?? $variableid::str}//{$Unit ?? ''UNK''}"'
     time: $datetime
     numeric_value: $value
     text_value: '$stringvalue if $stringvalue != ""'
@@ -227,6 +231,8 @@ raw_stage/observation_tables/parquet:
           $`Additional information` != "" else f"{$`Variable Name`} [{$Unit ?? 'no unit'}] (HiRID
           observation_tables, name and unit of the variableid in hirid_variable_reference)") if
           $`Source Table` == "Observation"
+        # The unit of the variableid as the reference records it (null for unitless variables).
+        unit: $Unit if $`Source Table` == "Observation"
       _self:
         description: >-
           f"HiRID observation variableid {$variableid} without an Observation entry in
