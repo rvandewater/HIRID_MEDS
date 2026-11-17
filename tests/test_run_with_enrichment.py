@@ -51,6 +51,11 @@ EXPECTED_PARENTS = {
     "OBSERVATION//Heart rate///min": ["LOINC//8867-4"],
     "OBSERVATION//999//UNK": ["LOINC//2160-0"],
 }
+# The in-dataset parents of unit siblings, added by the post-stage that runs before suMEDS.
+UNIT_SIBLING_PARENTS = {
+    "MEDICATION//Drug A//mg": ["MEDICATION//Drug A"],
+    "MEDICATION//Drug A//ml": ["MEDICATION//Drug A"],
+}
 
 
 def _sha256(data: bytes) -> str:
@@ -205,7 +210,7 @@ def test_observation_codes_get_loinc_parents(enriched: pa.Table):
     parents = {
         code: row["parent_codes"] for code, row in rows.items() if row["parent_codes"]
     }
-    assert parents == EXPECTED_PARENTS
+    assert parents == EXPECTED_PARENTS | UNIT_SIBLING_PARENTS
 
     hr = rows["OBSERVATION//Heart rate///min"]
     # The variable reference's own description is kept; the LOINC name goes into the names map.
@@ -221,7 +226,7 @@ def test_observation_codes_get_loinc_parents(enriched: pa.Table):
     for code in (
         "OBSERVATION//GCS//UNK",
         "OBSERVATION//Lab A//mmol/l",
-        "MEDICATION//Drug A",
+        "MEDICATION//Drug A//mg",
     ):
         assert rows[code]["vocabulary_id"] is None, code
 
@@ -234,7 +239,11 @@ def test_dataset_json_records_the_enrichment(enriched_dir: Path, enriched: pa.Ta
     assert record["coverage"]["codes"] == enriched.num_rows
     # The ETL describes every code, the literal ones included, before suMEDS runs.
     assert record["coverage"]["described"] == [enriched.num_rows, enriched.num_rows]
-    assert record["coverage"]["with_parent_codes"] == [0, len(EXPECTED_PARENTS)]
+    # suMEDS runs after the unit siblings got their in-dataset parent, and keeps it.
+    assert record["coverage"]["with_parent_codes"] == [
+        len(UNIT_SIBLING_PARENTS),
+        len(EXPECTED_PARENTS) + len(UNIT_SIBLING_PARENTS),
+    ]
 
 
 def test_failed_enrichment_keeps_the_plain_etl_output(
@@ -271,7 +280,9 @@ def test_skipping_the_stage_gives_the_plain_etl(
     assert "sumeds_enrichment" not in metadata
 
     spec = yaml.safe_load(SPEC_FP.read_text())
-    del spec["etl"]["post_stages"]
+    spec["etl"]["post_stages"] = [
+        stage for stage in spec["etl"]["post_stages"] if "sumeds_enrich" not in stage
+    ]
     spec_fp = tmp_path / "messy.yaml"
     spec_fp.write_text(yaml.safe_dump(spec, sort_keys=False))
     output_dir = tmp_path / "out"

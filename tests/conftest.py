@@ -46,6 +46,7 @@ def write_raw_fixture(root: Path) -> None:
         }
     ).write_csv(root / "general_table.csv")
     # ID 100 is both an observation variable and a drug, as one id is in the real reference.
+    # Pharma ids 100 and 400 share a name but not a dose unit, as two ids do in the real data.
     pl.DataFrame(
         {
             "Source Table": [
@@ -54,11 +55,19 @@ def write_raw_fixture(root: Path) -> None:
                 "Observation",
                 "Pharma",
                 "Pharma",
+                "Pharma",
             ],
-            "ID": [100, 200, 20000300, 100, 300],
-            "Variable Name": ["Heart rate", "GCS", "Lab A", "Drug A", "Drug B"],
-            "Unit": ["/min", None, "mmol/l", None, None],
-            "Additional information": [None, None, "from a drain", None, None],
+            "ID": [100, 200, 20000300, 100, 300, 400],
+            "Variable Name": [
+                "Heart rate",
+                "GCS",
+                "Lab A",
+                "Drug A",
+                "Drug B",
+                "Drug A",
+            ],
+            "Unit": ["/min", None, "mmol/l", None, None, None],
+            "Additional information": [None, None, "from a drain", None, None, None],
         }
     ).write_csv(root / "hirid_variable_reference.csv")
 
@@ -94,11 +103,11 @@ def write_raw_fixture(root: Path) -> None:
     pharma_dir.mkdir(parents=True)
     pl.DataFrame(
         {
-            "patientid": [1, 2],
-            "pharmaid": [100, 300],
-            "givenat": [T0.replace(hour=9), T0.replace(hour=11)],
-            "givendose": [5.0, 1.5],
-            "doseunit": ["mg", "ml"],
+            "patientid": [1, 2, 2],
+            "pharmaid": [100, 300, 400],
+            "givenat": [T0.replace(hour=9), T0.replace(hour=11), T0.replace(hour=11)],
+            "givendose": [5.0, 1.5, 2.5],
+            "doseunit": ["mg", "ml", "ml"],
         },
         schema_overrides={
             "patientid": pl.Int32,

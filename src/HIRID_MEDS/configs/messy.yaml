@@ -42,7 +42,19 @@ etl:
   # enrichment in metadata/dataset.json. A failed enrichment (e.g. without internet access) keeps
   # codes.parquet as the ETL wrote it and does not fail the run; `suMEDS-enrich OUTPUT_DIR` finishes
   # it later. `skip_stages=[sumeds_enrich]` leaves it out of a run.
+  #
+  # First, `hirid_collapse_unit_metadata` (src/HIRID_MEDS/unit_metadata.py) turns the `unit` list
+  # MEDS-Extract writes into one string per code (failing if any code has more than one unit),
+  # gives codes that differ only in their unit the code without the unit as parent, and adds a row
+  # for that parent code. It runs before suMEDS so that the enrichment, also a later
+  # `suMEDS-enrich`, sees the finished code list.
+  # Before the canonical pipeline, `hirid_unit_keys` (src/HIRID_MEDS/unit_keys.py) stages the
+  # side table `pharma_unit_in_code`: the pharmaids whose name is shared with rows of another dose
+  # unit, whose codes therefore end in the dose unit (see the pharma block below).
+  pre_stages:
+    - hirid_unit_keys
   post_stages:
+    - hirid_collapse_unit_metadata
     - sumeds_enrich: { rules: HIRID }
 
 _defaults:
@@ -179,16 +191,24 @@ raw_stage/pharma_records/parquet:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]
         cols: [Variable Name]
+      # Staged by the `hirid_unit_keys` pre-stage: `unit_in_code` is true for the pharmaids whose
+      # name is shared with rows of another dose unit, null for every other pharmaid.
+      pharma_unit_in_code:
+        left_on: _ref_id
+        right_on: pharmaid
+        cols: [unit_in_code]
     cols:
       _ref_table: "'Pharma'"
       _ref_id: "$pharmaid::int64"
       variable_name: { column: Variable Name }
+      _unit_suffix: '(f"//{$doseunit ?? ''UNK''}" if $unit_in_code else "")'
   # The dose unit is recorded on every pharma row (`doseunit`), so it is taken from there rather
-  # than from the reference table's `Unit` (empty for every `Pharma` row). It is also the code's
-  # `unit` metadata, read from the event's own rows (`_self`); a code whose rows record more than
-  # one dose unit (two pharmaids sharing a name) gets the list of them.
+  # than from the reference table's `Unit` (empty for every `Pharma` row). It is the code's `unit`
+  # metadata, read from the event's own rows (`_self`). A code holds one unit: where pharmaids that
+  # share a name differ in dose unit, their codes end in it (`_unit_suffix`); every other code is
+  # unchanged.
   medication:
-    code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}"'
+    code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}{$_unit_suffix}"'
     time: $givenat
     numeric_value: $givendose
     text_value: $doseunit

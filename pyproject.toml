@@ -42,6 +42,13 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 [project.entry-points."MEDS_extract.pipelines"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
 
+# Registers the unit steps as MEDS-Transforms stages, so the config can declare them: the
+# pre-stage that finds the medication codes needing their dose unit in the code, and the
+# post-stage that makes `unit` in codes.parquet one string per code.
+[project.entry-points."MEDS_transforms.stages"]
+hirid_collapse_unit_metadata = "HIRID_MEDS.unit_metadata:main"
+hirid_unit_keys = "HIRID_MEDS.unit_keys:main"
+
 # Registers the suMEDS rules under the same name, so the config's `sumeds_enrich: {rules: HIRID}`
 # and `--rules HIRID` find them.
 [project.entry-points."sumeds.rules"]

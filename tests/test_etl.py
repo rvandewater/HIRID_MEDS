@@ -52,7 +52,7 @@ def test_shared_id_does_not_fan_out(meds: pl.DataFrame):
     codes = meds["code"].value_counts().to_dict(as_series=False)
     counts = dict(zip(codes["code"], codes["count"], strict=True))
     assert counts["OBSERVATION//Heart rate///min"] == 4
-    assert counts["MEDICATION//Drug A"] == 1
+    assert counts["MEDICATION//Drug A//mg"] == 1
     assert not any("Drug" in c for c in counts if c.startswith("OBSERVATION"))
     assert not any("Heart rate" in c for c in counts if c.startswith("MEDICATION"))
 
@@ -66,9 +66,11 @@ def test_unreferenced_id_and_null_unit(meds: pl.DataFrame):
 def test_text_values(meds: pl.DataFrame):
     obs = meds.filter(pl.col("code").str.starts_with("OBSERVATION"))
     assert obs["text_value"].drop_nulls().to_list() == ["abnormal"]
-    med = meds.filter(pl.col("code").str.starts_with("MEDICATION")).sort("subject_id")
-    assert med["text_value"].to_list() == ["mg", "ml"]
-    assert med["numeric_value"].to_list() == [5.0, 1.5]
+    med = meds.filter(pl.col("code").str.starts_with("MEDICATION")).sort(
+        "subject_id", "code"
+    )
+    assert med["text_value"].to_list() == ["mg", "ml", "ml"]
+    assert med["numeric_value"].to_list() == [5.0, 2.5, 1.5]
 
 
 def test_patient_events(meds: pl.DataFrame):
@@ -97,8 +99,11 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     table = pq.read_table(meds_dir / "metadata" / "codes.parquet")
     CodeMetadataSchema.validate(table)
     # The ETL adds no vocabulary parents; suMEDS adds LOINC parents from `sumeds_rules.yaml`
-    # (tests/test_run_with_enrichment.py).
-    assert "parent_codes" not in table.column_names
+    # (tests/test_run_with_enrichment.py). The only parents are the in-dataset ones of unit
+    # siblings (test_code_units).
+    assert {p for ps in table["parent_codes"].to_pylist() if ps for p in ps} == {
+        "MEDICATION//Drug A"
+    }
     by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
     assert set(meds["code"]) <= set(by_code)
     # Every code is described, the literal ones by their `_self` blocks (next test).
@@ -108,7 +113,7 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     hr = by_code["OBSERVATION//Heart rate///min"]
     assert hr["description"].startswith("Heart rate [/min] (HiRID observation_tables")
     assert "Drug" not in hr["description"]
-    drug = by_code["MEDICATION//Drug A"]
+    drug = by_code["MEDICATION//Drug A//mg"]
     assert drug["description"].startswith("Drug A (HiRID pharma_records")
     assert "Heart rate" not in drug["description"]
     assert by_code["OBSERVATION//GCS//UNK"]["description"].startswith("GCS [no unit]")
@@ -138,20 +143,37 @@ def test_literal_codes_are_described(meds_dir: Path):
     assert literal["code_template"].to_list() == literal["code"].to_list()
 
 
-def test_code_units(meds_dir: Path):
-    """Each code's unit is in `codes.parquet`; the units in the codes themselves are unchanged."""
+def test_code_units(meds: pl.DataFrame, meds_dir: Path):
+    """Each code has one unit, a string in `codes.parquet`, the same as the code's unit component."""
     codes = pl.read_parquet(meds_dir / "metadata" / "codes.parquet")
-    # MEDS-Extract writes extra metadata columns as List(String).
-    assert codes.schema["unit"] == pl.List(pl.String)
+    # The `hirid_collapse_unit_metadata` post-stage turns MEDS-Extract's List(String) into String.
+    assert codes.schema["unit"] == pl.String
     units = dict(zip(codes["code"], codes["unit"].to_list(), strict=True))
     # Observation codes: the reference `Unit` of the variableid, only from its Observation row.
-    assert units["OBSERVATION//Heart rate///min"] == ["/min"]
-    assert units["OBSERVATION//Lab A//mmol/l"] == ["mmol/l"]
+    assert units["OBSERVATION//Heart rate///min"] == "/min"
+    assert units["OBSERVATION//Lab A//mmol/l"] == "mmol/l"
     # A unitless variable and an id without a reference entry have no unit.
     assert units["OBSERVATION//GCS//UNK"] is None
     assert units["OBSERVATION//999//UNK"] is None
-    # Medication codes: the `doseunit` recorded on the drug's own rows.
-    assert units["MEDICATION//Drug A"] == ["mg"]
-    assert units["MEDICATION//Drug B"] == ["ml"]
+    # Medication codes: the `doseunit` recorded on the drug's own rows. A name shared by pharmaids
+    # with different dose units (ids 100 and 400) gives one code per unit, ending in it.
+    assert units["MEDICATION//Drug A//mg"] == "mg"
+    assert units["MEDICATION//Drug A//ml"] == "ml"
+    # Only names whose rows differ in dose unit get it in the code; the others are unchanged.
+    assert units["MEDICATION//Drug B"] == "ml"
+    # Codes that differ only in their unit get the code without the unit as parent, with a row
+    # of its own: no unit, the siblings' shared description. A unit-suffixed code without a
+    # sibling gets no parent.
+    assert units["MEDICATION//Drug A"] is None
+    descriptions = dict(zip(codes["code"], codes["description"], strict=True))
+    assert descriptions["MEDICATION//Drug A"] == descriptions["MEDICATION//Drug A//mg"]
+    assert descriptions["MEDICATION//Drug A"].startswith("Drug A (HiRID pharma_records")
+    parents = dict(zip(codes["code"], codes["parent_codes"].to_list(), strict=True))
+    assert parents["MEDICATION//Drug A//mg"] == ["MEDICATION//Drug A"]
+    assert parents["MEDICATION//Drug A//ml"] == ["MEDICATION//Drug A"]
+    assert parents["MEDICATION//Drug B"] is None
+    assert parents["OBSERVATION//Lab A//mmol/l"] is None
+    assert parents["MEDICATION//Drug A"] is None
+    assert "MEDICATION//Drug A" not in set(meds["code"])  # a metadata row only
     assert units["SEX//F"] is None
     assert units["HOSPITAL_ADMISSION"] is None
