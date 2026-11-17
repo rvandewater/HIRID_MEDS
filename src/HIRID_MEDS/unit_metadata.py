@@ -63,10 +63,21 @@ def collapse_units(unit: pl.Series, code: pl.Series) -> pl.Series:
             ...
         ValueError: 1 codes have more than one unit, e.g. ['A']. Put the unit in the code for that family (as its last component) so that each code has one unit.
     """
-    unit = unit.list.eval(
-        pl.element().str.strip_chars().filter(pl.element().str.strip_chars() != "")
-    ).list.unique(maintain_order=True)
-    several = code.filter(unit.list.len() > 1)
+    # Exploded rather than `list.eval`, which some polars versions mis-evaluate with a filter.
+    values = (
+        pl.DataFrame({"row": range(unit.len()), "unit": unit})
+        .explode("unit")
+        .with_columns(pl.col("unit").str.strip_chars())
+        .filter(pl.col("unit").is_not_null() & (pl.col("unit") != ""))
+        .group_by("row", maintain_order=True)
+        .agg(pl.col("unit").unique(maintain_order=True))
+    )
+    unit = (
+        pl.DataFrame({"row": range(unit.len())})
+        .join(values, on="row", how="left")
+        .sort("row")["unit"]
+    )
+    several = code.filter((unit.list.len() > 1).fill_null(False))
     if several.len():
         raise ValueError(
             f"{several.len()} codes have more than one unit, e.g. {several.head(5).to_list()}. Put "
@@ -273,18 +284,29 @@ def collapse_unit_metadata(codes_fp: Path) -> UnitSummary:
     table = pq.read_table(codes_fp)
     if "unit" not in table.column_names:
         return UnitSummary(0, 0, 0, 0)
+
+    # Through Python objects: codes.parquet is vocabulary-sized, and some polars versions panic on
+    # Arrow large types read back from parquet.
+    def column(name: str, dtype: pl.DataType) -> pl.Series:
+        return pl.Series(name, table[name].to_pylist(), dtype=dtype)
+
+    is_string = pa.types.is_string(
+        table.schema.field("unit").type
+    ) or pa.types.is_large_string(table.schema.field("unit").type)
     frame = pl.DataFrame(
-        {"code": pl.from_arrow(table["code"]), "unit": pl.from_arrow(table["unit"])}
+        [
+            column("code", pl.String),
+            column("unit", pl.String if is_string else pl.List(pl.String)),
+        ]
     )
-    if frame.schema["unit"] != pl.String:
+    if not is_string:
         frame = frame.with_columns(
             collapse_units(frame["unit"], frame["code"]).alias("unit")
         )
-    for name in ("description", "parent_codes"):
-        if name in table.column_names:
-            frame = frame.with_columns(pl.from_arrow(table[name]).alias(name))
-    if "parent_codes" in frame.columns:
-        frame = frame.with_columns(pl.col("parent_codes").cast(pl.List(pl.String)))
+    if "description" in table.column_names:
+        frame = frame.with_columns(column("description", pl.String))
+    if "parent_codes" in table.column_names:
+        frame = frame.with_columns(column("parent_codes", pl.List(pl.String)))
     frame = unit_sibling_parents(frame)
     stem_rows = unit_stem_rows(frame)
     stems = unit_sibling_stems(frame["code"], frame["unit"])
@@ -295,10 +317,19 @@ def collapse_unit_metadata(codes_fp: Path) -> UnitSummary:
         stem_rows_added=len(stem_rows),
     )
 
+    # Only `unit` and `parent_codes` are replaced; every other column keeps its Arrow type. `unit`
+    # is written as large_string, as suMEDS writes it back; `parent_codes` keeps its type, or is
+    # the MEDS list<string> when it is new.
     out = table
-    for name, dtype in (("unit", pa.string()), ("parent_codes", pa.list_(pa.string()))):
+    for name in ("unit", "parent_codes"):
         if name not in frame.columns:
             continue
+        if name == "unit":
+            dtype = pa.large_string()
+        elif name in out.column_names:
+            dtype = out.schema.field(name).type
+        else:
+            dtype = pa.list_(pa.string())
         field, array = pa.field(name, dtype), pa.array(frame[name].to_list(), dtype)
         if name in out.column_names:
             out = out.set_column(out.column_names.index(name), field, array)
@@ -306,17 +337,6 @@ def collapse_unit_metadata(codes_fp: Path) -> UnitSummary:
             out = out.append_column(field, array)
     if out.equals(table) and not stem_rows:
         return summary
-    # Polars writes strings as Arrow large_string, which the MEDS schema rejects.
-    out = out.cast(
-        pa.schema(
-            [
-                pa.field(
-                    f.name, pa.string() if pa.types.is_large_string(f.type) else f.type
-                )
-                for f in out.schema
-            ]
-        )
-    )
     if stem_rows:
         was_sorted = frame["code"].is_sorted()
         out = pa.concat_tables(
@@ -324,7 +344,20 @@ def collapse_unit_metadata(codes_fp: Path) -> UnitSummary:
         )
         if was_sorted:
             out = out.sort_by("code")
-    CodeMetadataSchema.validate(out)
+    # Validated as MEDS code metadata; files written by polars (tests) hold large types, which
+    # the schema rejects, so only the check sees its MEDS columns cast.
+    meds_types = {
+        "code": pa.string(),
+        "description": pa.string(),
+        "parent_codes": pa.list_(pa.string()),
+    }
+    CodeMetadataSchema.validate(
+        out.cast(
+            pa.schema(
+                [pa.field(f.name, meds_types.get(f.name, f.type)) for f in out.schema]
+            )
+        )
+    )
     tmp_fp = codes_fp.with_suffix(".parquet.tmp")
     pq.write_table(out, tmp_fp)
     os.replace(tmp_fp, codes_fp)

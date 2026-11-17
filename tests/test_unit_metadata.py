@@ -1,9 +1,9 @@
 """The post-step that makes `unit` one string per code and links unit siblings, on synthetic files."""
 
 import polars as pl
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from meds import CodeMetadataSchema
 
 from HIRID_MEDS.unit_metadata import UnitSummary, collapse_unit_metadata
 
@@ -40,7 +40,8 @@ def test_list_units_become_one_string(tmp_path):
     assert out["unit"].to_list() == ["mg/dL", "g/dL", "%", "mmol/L", None, None, None]
     # No unit siblings: no parent_codes column is added.
     assert out.columns == ["code", "description", "unit"]
-    CodeMetadataSchema.validate(pq.read_table(fp))
+    # `unit` is written as Arrow large_string, as suMEDS writes it back.
+    assert pq.read_table(fp).schema.field("unit").type == pa.large_string()
 
 
 def test_several_units_are_an_error_and_nothing_is_written(tmp_path):
@@ -123,7 +124,8 @@ def test_unit_siblings_get_the_code_without_the_unit_as_parent(tmp_path):
         None,
         None,
     ]
-    CodeMetadataSchema.validate(pq.read_table(fp))
+    # `unit` is written as Arrow large_string, as suMEDS writes it back.
+    assert pq.read_table(fp).schema.field("unit").type == pa.large_string()
 
     # Idempotent: a second run adds no row and changes nothing.
     before = fp.read_bytes()
@@ -185,3 +187,38 @@ def test_stem_description_without_the_siblings_units(tmp_path):
     assert out["A//x"] == "Dose of x"
     # They differ otherwise too: no description.
     assert out["B//y"] is None
+
+
+def test_other_columns_keep_their_arrow_types(tmp_path):
+    fp = tmp_path / "codes.parquet"
+    names = pa.map_(pa.string(), pa.string())
+    table = pa.table(
+        {
+            "code": pa.array(["X//a//mg", "X//a//g"], pa.string()),
+            "description": pa.array(["a", "a"], pa.string()),
+            "parent_codes": pa.array(
+                [["ATC//N02"], ["ATC//N02"]], pa.list_(pa.string())
+            ),
+            "code_template": pa.array(["t", "t"], pa.string()),
+            "parent_names": pa.array([[("ATC//N02", "n")], [("ATC//N02", "n")]], names),
+            "unit": pa.array([["mg"], ["g"]], pa.list_(pa.string())),
+        }
+    )
+    pq.write_table(table, fp)
+    assert collapse_unit_metadata(fp) == UnitSummary(2, 1, 2, 1)
+    out = pq.read_table(fp)
+    for name in (
+        "code",
+        "description",
+        "parent_codes",
+        "code_template",
+        "parent_names",
+    ):
+        assert out.schema.field(name).type == table.schema.field(name).type, name
+    assert out.schema.field("unit").type == pa.large_string()
+    rows = {row["code"]: row for row in out.to_pylist()}
+    assert rows["X//a"]["parent_codes"] == ["ATC//N02"]
+    assert (
+        rows["X//a"]["parent_names"] is None and rows["X//a"]["code_template"] is None
+    )
+    assert rows["X//a//mg"]["parent_names"] == [("ATC//N02", "n")]
