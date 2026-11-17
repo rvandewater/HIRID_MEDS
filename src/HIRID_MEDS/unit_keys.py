@@ -15,14 +15,17 @@ import os
 from pathlib import Path
 
 import polars as pl
+from MEDS_extract.io import resolve_source_files, scan_source
 from MEDS_transforms.stages import Stage
 
 logger = logging.getLogger(__name__)
 
 STAGE_NAME = "hirid_unit_keys"
 SIDE_TABLE_NAME = "pharma_unit_in_code"
-REFERENCE = "hirid_variable_reference.csv"
-PHARMA = Path("raw_stage", "pharma_records", "parquet")
+# Table prefixes as the spec names them; MEDS-Extract resolves each to `{prefix}/*.{ext}` or
+# `{prefix}.{ext}` (parquet, par, csv.gz or csv), and so does this stage.
+REFERENCE = "hirid_variable_reference"
+PHARMA = "raw_stage/pharma_records/parquet"
 
 
 def pharmaids_with_unit_in_code(
@@ -78,13 +81,20 @@ def pharmaids_with_unit_in_code(
 def write_unit_keys(raw_input_dir: Path, output_dir: Path) -> Path:
     """Write the ``pharma_unit_in_code`` side table of the release in ``raw_input_dir``.
 
+    Both tables are found as MEDS-Extract finds the spec's tables (``MEDS_extract.io``): the
+    release's ``hirid_variable_reference.csv`` and ``raw_stage/pharma_records/parquet/*.parquet``,
+    or the same prefixes in another supported layout or format (e.g. the single parquet files
+    MESSY-synth writes). Both are required: a missing table raises ``FileNotFoundError``.
+
     Returns:
         The written file, replaced atomically.
     """
     raw_input_dir = Path(raw_input_dir)
     table = pharmaids_with_unit_in_code(
-        pl.scan_csv(raw_input_dir / REFERENCE, infer_schema_length=None),
-        pl.scan_parquet(raw_input_dir / PHARMA / "*.parquet"),
+        scan_source(
+            resolve_source_files(raw_input_dir, REFERENCE), infer_schema_length=None
+        ),
+        scan_source(resolve_source_files(raw_input_dir, PHARMA)),
     )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
