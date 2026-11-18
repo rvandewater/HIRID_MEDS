@@ -4,7 +4,8 @@ This file records the modelling choices made in
 [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml) for the MEDS-Extract 0.7
 migration ([PR #2](https://github.com/rvandewater/HIRID_MEDS/pull/2)), why they were made, and
 which ones are still open. Open questions link to their GitHub issue. The config has since moved
-to MEDS-Extract 0.8; for this config, that renames `_table.join` to `_table.joins`.
+to MEDS-Extract 0.8; for this config, that renames `_table.join` to `_table.joins`. It now requires
+0.9, which writes `unit` in `codes.parquet` as one string per code.
 
 All numbers are from HiRID **1.1.1** (`reference_data.tar.gz`,
 `raw_stage/observation_tables_parquet.tar.gz`, `raw_stage/pharma_records_parquet.tar.gz`, checksums

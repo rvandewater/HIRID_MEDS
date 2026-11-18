@@ -146,7 +146,7 @@ def test_literal_codes_are_described(meds_dir: Path):
 def test_code_units(meds: pl.DataFrame, meds_dir: Path):
     """Each code has one unit, a string in `codes.parquet`, the same as the code's unit component."""
     codes = pl.read_parquet(meds_dir / "metadata" / "codes.parquet")
-    # The `hirid_collapse_unit_metadata` post-stage turns MEDS-Extract's List(String) into String.
+    # MEDS-Extract (0.9 and later) writes one String per code.
     assert codes.schema["unit"] == pl.String
     units = dict(zip(codes["code"], codes["unit"].to_list(), strict=True))
     # Observation codes: the reference `Unit` of the variableid, only from its Observation row.

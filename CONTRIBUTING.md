@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a **MEDS-Extract 0.8 ETL**. All of it is one declarative file; there is no
+This repository is a **MEDS-Extract 0.9 ETL**. All of it is one declarative file; there is no
 Python to change.
 
 ```bash

@@ -1,4 +1,4 @@
-# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.8).
+# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.9).
 #
 # This single file replaces what used to be spread across four places:
 #   - `dataset.yaml`          -> the `sources:` block below
@@ -43,10 +43,9 @@ etl:
   # codes.parquet as the ETL wrote it and does not fail the run; `suMEDS-enrich OUTPUT_DIR` finishes
   # it later. `skip_stages=[sumeds_enrich]` leaves it out of a run.
   #
-  # First, `hirid_collapse_unit_metadata` (src/HIRID_MEDS/unit_metadata.py) turns the `unit` list
-  # MEDS-Extract writes into one string per code (failing if any code has more than one unit),
-  # gives codes that differ only in their unit the code without the unit as parent, and adds a row
-  # for that parent code. It runs before suMEDS so that the enrichment, also a later
+  # First, `hirid_unit_metadata` (src/HIRID_MEDS/unit_metadata.py) gives codes that differ only in
+  # their unit the code without the unit as parent, and adds a row for that parent code.
+  # (MEDS-Extract writes `unit` as one string per code and fails if any code has more than one.) It runs before suMEDS so that the enrichment, also a later
   # `suMEDS-enrich`, sees the finished code list.
   # Before the canonical pipeline, `hirid_unit_keys` (src/HIRID_MEDS/unit_keys.py) stages the
   # side table `pharma_unit_in_code`: the pharmaids whose name is shared with rows of another dose
@@ -54,7 +53,7 @@ etl:
   pre_stages:
     - hirid_unit_keys
   post_stages:
-    - hirid_collapse_unit_metadata
+    - hirid_unit_metadata
     - sumeds_enrich: { rules: HIRID }
 
 _defaults:

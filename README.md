@@ -214,12 +214,11 @@ depends on the data: the pre-stage `hirid_unit_keys` (`src/HIRID_MEDS/unit_keys.
 side table `pharma_unit_in_code` that the pharma block joins. On HiRID 1.1.1 one medication code
 changes: it becomes three codes, one per dose unit.
 
-MEDS-Extract writes extracted metadata as a list of the distinct values per code, so the post-stage
-`hirid_collapse_unit_metadata` (`src/HIRID_MEDS/unit_metadata.py`, declared in `etl.post_stages`
-before suMEDS, so the enrichment sees the finished code list) makes `unit` one string per code and
-fails if any code has more than one unit. It also gives codes that differ only in their unit
-(`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit (`MEDICATION//X`) as an
-in-dataset parent in `parent_codes`, and adds a row for that code: no unit, the description its
+MEDS-Extract (0.9 and later) writes `unit` as one string per code and fails if any code has more
+than one unit. The post-stage `hirid_unit_metadata` (`src/HIRID_MEDS/unit_metadata.py`, declared in
+`etl.post_stages` before suMEDS, so the enrichment sees the finished code list) gives codes that
+differ only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
+(`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit, the description its
 siblings share (or, if they differ only by their own unit, that description without it), and the
 parents they all have. On HiRID 1.1.1 that is 1 group of 3 codes and 1 added row.
 
