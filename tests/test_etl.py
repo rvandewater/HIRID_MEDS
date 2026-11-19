@@ -144,23 +144,33 @@ def test_literal_codes_are_described(meds_dir: Path):
 
 
 def test_code_units(meds: pl.DataFrame, meds_dir: Path):
-    """Each code has one unit, a string in `codes.parquet`, the same as the code's unit component."""
+    """Each code has one unit, a string in `codes.parquet`: as recorded, the same as the code's unit
+    component, and in `unit` written in UCUM."""
     codes = pl.read_parquet(meds_dir / "metadata" / "codes.parquet")
     # MEDS-Extract (0.9 and later) writes one String per code.
     assert codes.schema["unit"] == pl.String
     units = dict(zip(codes["code"], codes["unit"].to_list(), strict=True))
+    # suMEDS's `sumeds_normalize_units` writes `unit` in UCUM and keeps the spelling as recorded
+    # in `unit_source_value`; the code keeps its name.
+    recorded = dict(
+        zip(codes["code"], codes["unit_source_value"].to_list(), strict=True)
+    )
     # Observation codes: the reference `Unit` of the variableid, only from its Observation row.
     assert units["OBSERVATION//Heart rate///min"] == "/min"
-    assert units["OBSERVATION//Lab A//mmol/l"] == "mmol/l"
+    assert units["OBSERVATION//Lab A//mmol/l"] == "mmol/L"
+    assert recorded["OBSERVATION//Lab A//mmol/l"] == "mmol/l"
     # A unitless variable and an id without a reference entry have no unit.
     assert units["OBSERVATION//GCS//UNK"] is None
     assert units["OBSERVATION//999//UNK"] is None
     # Medication codes: the `doseunit` recorded on the drug's own rows. A name shared by pharmaids
     # with different dose units (ids 100 and 400) gives one code per unit, ending in it.
     assert units["MEDICATION//Drug A//mg"] == "mg"
-    assert units["MEDICATION//Drug A//ml"] == "ml"
+    assert (units["MEDICATION//Drug A//ml"], recorded["MEDICATION//Drug A//ml"]) == (
+        "mL",
+        "ml",
+    )
     # Only names whose rows differ in dose unit get it in the code; the others are unchanged.
-    assert units["MEDICATION//Drug B"] == "ml"
+    assert (units["MEDICATION//Drug B"], recorded["MEDICATION//Drug B"]) == ("mL", "ml")
     # Codes that differ only in their unit get the code without the unit as parent, with a row
     # of its own: no unit, the siblings' shared description. A unit-suffixed code without a
     # sibling gets no parent.

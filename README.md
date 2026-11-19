@@ -124,8 +124,8 @@ ETL code and no suMEDS code. The file declares:
 - **`sources:`**: where the raw data lives (the PhysioNet release, restricted to the three archives
     above, unpacked after download).
 - **`etl:`**: the dataset name and sharding options, the license and PhysioNet page written to
-    `metadata/dataset.json`, and the suMEDS enrichment that runs after the pipeline
-    (`post_stages`).
+    `metadata/dataset.json`, and the stages that run after the pipeline (`post_stages`): unit
+    siblings, suMEDS's UCUM units and the suMEDS enrichment.
 - **One block per raw table**: how each row becomes one or more MEDS events, and which tables it is
     joined with.
 
@@ -196,8 +196,11 @@ LOINC parents from the packaged rules file (see
 | `SEX//{sex}`                                                           | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
 | `HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
 
-**Units.** `unit` is a string: the unit of the code's numeric values as recorded, one per code
-(null for codes without one). MEDS does not standardise this column. `OBSERVATION` codes get the
+**Units.** `unit` is a string: the unit of the code's numeric values, one per code (null for codes
+without one), written in [UCUM](https://ucum.org/) by suMEDS's `sumeds_normalize_units` post-stage
+(`mmol/l` becomes `mmol/L`, `ml` becomes `mL`). The spelling as recorded stays in
+`unit_source_value`, a spelling suMEDS does not know is kept as it is, and the codes keep their names
+(`MEDICATION//X//ml` stays). `OBSERVATION` codes get the
 `Unit` of their variableid in `hirid_variable_reference` (the same external block as the
 description, and the code's last component; null for unitless variables and ids without a
 reference entry). `MEDICATION` codes get the `doseunit` of their own rows (a `_self` block),
@@ -249,7 +252,7 @@ Vocabulary work (LOINC tables, ontology checks) lives in
 rules for it, [`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml), registered in
 suMEDS's `sumeds.rules` entry-point group under the same name as the MEDS-Extract spec, `HIRID`.
 The config declares suMEDS's `sumeds_enrich` stage after the canonical pipeline
-(`etl.post_stages`), so `meds-extract-run spec=HIRID` enriches the finished
+(`etl.post_stages`, after `hirid_unit_metadata` and suMEDS's `sumeds_normalize_units`), so `meds-extract-run spec=HIRID` enriches the finished
 `metadata/codes.parquet` in place, and it stays valid MEDS code metadata. `--rules HIRID` works for
 any suMEDS command. By default the LOINC data and the HiRID crosswalk come from suMEDS's versioned
 ontology data (sumeds-ontologies, pinned release), fetched from GitHub on first use and cached; no

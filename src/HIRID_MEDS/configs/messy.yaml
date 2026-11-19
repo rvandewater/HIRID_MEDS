@@ -54,6 +54,9 @@ etl:
     - hirid_unit_keys
   post_stages:
     - hirid_unit_metadata
+    # One UCUM spelling for every `unit` (suMEDS's shared table, e.g. `Cel`, `mm[Hg]`, `mg/dL`); the
+    # spelling as recorded stays in `unit_source_value`, and an unknown spelling is kept as it is.
+    - sumeds_normalize_units
     - sumeds_enrich: { rules: HIRID }
 
 _defaults:
