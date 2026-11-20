@@ -114,10 +114,12 @@ microseconds; no raw timestamp has a sub-microsecond component, so nothing is lo
 
 ### D8. Patient-level events (kept from the previous ETL)
 
-- `HOSPITAL_ADMISSION` at `admissiontime`; `SEX//{sex}` as a static event.
+- `ICU_ADMISSION` at `admissiontime`; `SEX//{sex}` as a static event. Each `patientid` is one ICU
+    (re-)admission and HiRID has no hospital admission, so the code says ICU (it was
+    `HOSPITAL_ADMISSION` up to 0.2.0; the discharge likewise `HOSPITAL_DISCHARGE`).
 - `MEDS_BIRTH` at `admissiontime − age` years. HiRID `age` is binned (15 distinct values, 20–90),
     so this is a pseudo date of birth with up to ~5 years of error.
-- `HOSPITAL_DISCHARGE` at the patient's **last observation** (`max(datetime)` over
+- `ICU_DISCHARGE` at the patient's **last observation** (`max(datetime)` over
     `observation_tables`). One `general_table` patient has no observations and so no discharge.
 - `MEDS_DEATH` at the same time, iff `discharge_status != "alive"`. 2,062 patients are `dead`,
     31,604 `alive`, and 239 have a null status, which is treated as *not* dead.
@@ -189,15 +191,15 @@ Full run over the complete release on a 10-core / 24 GB laptop, single worker,
 `POLARS_ENGINE_AFFINITY=streaming`: 13 min wall time, 9.5 GB peak RSS, 4.8 GB of MEDS data in
 28 train / 4 tuning / 4 held-out shards. All eight stages succeeded.
 
-| Code                 |      Events | Subjects / notes                                                              |
-| -------------------- | ----------: | ----------------------------------------------------------------------------- |
-| `HOSPITAL_ADMISSION` |      33,905 | every `general_table` patient                                                 |
-| `SEX//…`             |      33,905 | static                                                                        |
-| `MEDS_BIRTH`         |      33,905 |                                                                               |
-| `HOSPITAL_DISCHARGE` |      33,904 | one patient has no observations                                               |
-| `MEDS_DEATH`         |       2,062 | equals the number of `dead` statuses                                          |
-| `MEDICATION//…`      |  16,251,885 | 525 codes (2 raw-id fallbacks); all have `numeric_value` and `text_value`     |
-| `OBSERVATION//…`     | 758,651,401 | 123 codes (5 raw-id fallbacks, 11 ending `//UNK`); 33,643 with a `text_value` |
+| Code             |      Events | Subjects / notes                                                              |
+| ---------------- | ----------: | ----------------------------------------------------------------------------- |
+| `ICU_ADMISSION`  |      33,905 | every `general_table` patient                                                 |
+| `SEX//…`         |      33,905 | static                                                                        |
+| `MEDS_BIRTH`     |      33,905 |                                                                               |
+| `ICU_DISCHARGE`  |      33,904 | one patient has no observations                                               |
+| `MEDS_DEATH`     |       2,062 | equals the number of `dead` statuses                                          |
+| `MEDICATION//…`  |  16,251,885 | 525 codes (2 raw-id fallbacks); all have `numeric_value` and `text_value`     |
+| `OBSERVATION//…` | 758,651,401 | 123 codes (5 raw-id fallbacks, 11 ending `//UNK`); 33,643 with a `text_value` |
 
 Consistency checks (counts of subjects violating each):
 

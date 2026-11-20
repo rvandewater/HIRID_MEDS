@@ -94,6 +94,6 @@ def test_rules_do_not_match_other_codes():
             "_unit_suffix": ["//mg", ""],
         },
     )
-    other += ["SEX//M", "MEDS_BIRTH", "HOSPITAL_ADMISSION"]
+    other += ["SEX//M", "MEDS_BIRTH", "ICU_ADMISSION"]
     for rule in load_rules(Path(str(RULES))).crosswalk:
         assert all(rule.key(code) is None for code in other), rule.id
