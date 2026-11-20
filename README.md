@@ -218,12 +218,16 @@ side table `pharma_unit_in_code` that the pharma block joins. On HiRID 1.1.1 one
 changes: it becomes three codes, one per dose unit.
 
 MEDS-Extract (0.9 and later) writes `unit` as one string per code and fails if any code has more
-than one unit. The post-stage `hirid_unit_metadata` (`src/HIRID_MEDS/unit_metadata.py`, declared in
-`etl.post_stages` before suMEDS, so the enrichment sees the finished code list) gives codes that
-differ only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
-(`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit, the description its
-siblings share (or, if they differ only by their own unit, that description without it), and the
-parents they all have. On HiRID 1.1.1 that is 1 group of 3 codes and 1 added row.
+than one unit. suMEDS's shared post-stage `sumeds_link_unit_siblings`
+([docs](https://github.com/rvandewater/suMEDS/blob/main/docs/unit_siblings.md)), declared first in
+`etl.post_stages` so the other suMEDS stages see the finished code list, gives codes that differ
+only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
+(`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit,
+the description its siblings share (or, if they differ only by their own unit, that description
+without it), and the parents they all have. HiRID uses the stage's default options, so a
+`MEDICATION//X//UNK` code also gets `MEDICATION//X` once `X` has a real unit. The post-stages run in
+this order: `sumeds_link_unit_siblings`, `sumeds_normalize_units`, `sumeds_enrich`. On HiRID 1.1.1
+the ETL's own copy of this step (before suMEDS 0.6.6) found 1 group of 3 codes and added 1 row.
 
 The dictionary is joined rather than evaluated per event because `observation_tables` has ~777M
 rows: an external `_metadata` table is read once per shard, while a `_self` value is carried on
@@ -252,7 +256,7 @@ Vocabulary work (LOINC tables, ontology checks) lives in
 rules for it, [`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml), registered in
 suMEDS's `sumeds.rules` entry-point group under the same name as the MEDS-Extract spec, `HIRID`.
 The config declares suMEDS's `sumeds_enrich` stage after the canonical pipeline
-(`etl.post_stages`, after `hirid_unit_metadata` and suMEDS's `sumeds_normalize_units`), so `meds-extract-run spec=HIRID` enriches the finished
+(`etl.post_stages`, after suMEDS's `sumeds_link_unit_siblings` and `sumeds_normalize_units`), so `meds-extract-run spec=HIRID` enriches the finished
 `metadata/codes.parquet` in place, and it stays valid MEDS code metadata. `--rules HIRID` works for
 any suMEDS command. By default the LOINC data and the HiRID crosswalk come from suMEDS's versioned
 ontology data (sumeds-ontologies, pinned release), fetched from GitHub on first use and cached; no
