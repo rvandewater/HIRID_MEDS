@@ -229,7 +229,10 @@ than one unit. suMEDS's shared post-stage `sumeds_link_unit_siblings`
 only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
 (`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit,
 the description its siblings share (or, if they differ only by their own unit, that description
-without it), and the parents they all have. HiRID uses the stage's default options, so a
+without it), and the parents they all have. With `link_single_units: true`, a code ending in its
+unit gets its stem also when its item has a single unit (`MEDICATION//X//mg` gets `MEDICATION//X`), so
+every medication and observation code with a recorded unit has its unit-free stem. HiRID uses the
+stage's default options otherwise, so a
 `MEDICATION//X//UNK` code also gets `MEDICATION//X` once `X` has a real unit. The post-stages run in
 this order: `sumeds_link_unit_siblings`, `sumeds_normalize_units`, `sumeds_enrich`. On HiRID 1.1.1
 the ETL's own copy of this step (before suMEDS 0.6.6) found 1 group of 3 codes and added 1 row.
@@ -383,6 +386,15 @@ upgrade can also move the output, so check it with `--compare`.
 ## Breaking changes
 
 ### Unreleased
+
+- **`codes.parquet` gains unit-free stem rows and stem parents for single-unit codes**
+    ([#28](https://github.com/rvandewater/HIRID_MEDS/pull/28)). suMEDS's `sumeds_link_unit_siblings` now runs with `link_single_units: true`:
+    every code that ends in its unit gets the code without the unit (its stem) as its last
+    `parent_codes` entry, and the stem gets a row of its own (no unit, no events), also when the
+    item has a single unit (`MEDICATION//{name}//{doseunit}` gets `MEDICATION//{name}`, `OBSERVATION//{name}//{unit}` gets `OBSERVATION//{name}`). Before, only items recorded in two or more units did.
+    Events are unchanged. On a synthetic (MESSY-synth) build, 11 codes gain a stem parent and 11 stem rows are added (8 `OBSERVATION`, 3 `MEDICATION`). To migrate, nothing is needed unless a tool expects every
+    `codes.parquet` row to have events: drop the stem rows (no `code_template`, no `unit`), or
+    ignore a parent that is the code without its last `//` component.
 
 - **Every medication code ends in its dose unit**: `MEDICATION//{Variable Name}//{doseunit}` (and
     `MEDICATION//<pharmaid>//{doseunit}` for a pharmaid without a reference entry), with the unit

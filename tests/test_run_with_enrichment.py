@@ -51,11 +51,15 @@ EXPECTED_PARENTS = {
     "OBSERVATION//Heart rate///min": ["LOINC//8867-4"],
     "OBSERVATION//999//UNK": ["LOINC//2160-0"],
 }
-# The in-dataset parents of unit siblings, added by suMEDS's `sumeds_link_unit_siblings`, which runs
-# before the enrichment.
+# The in-dataset parents of codes ending in their unit (their unit-free stem), added by suMEDS's
+# `sumeds_link_unit_siblings`, which runs before the enrichment: of unit siblings, and with
+# `link_single_units` of a code in a single unit too.
 UNIT_SIBLING_PARENTS = {
     "MEDICATION//Drug A//mg": ["MEDICATION//Drug A"],
     "MEDICATION//Drug A//ml": ["MEDICATION//Drug A"],
+    "MEDICATION//Drug B//ml": ["MEDICATION//Drug B"],
+    "OBSERVATION//Lab A//mmol/l": ["OBSERVATION//Lab A"],
+    "OBSERVATION//Heart rate///min": ["OBSERVATION//Heart rate"],
 }
 
 
@@ -211,7 +215,11 @@ def test_observation_codes_get_loinc_parents(enriched: pa.Table):
     parents = {
         code: row["parent_codes"] for code, row in rows.items() if row["parent_codes"]
     }
-    assert parents == EXPECTED_PARENTS | UNIT_SIBLING_PARENTS
+    # The stem comes first (its stage runs first), then suMEDS's parents.
+    assert parents == {
+        code: UNIT_SIBLING_PARENTS.get(code, []) + EXPECTED_PARENTS.get(code, [])
+        for code in EXPECTED_PARENTS.keys() | UNIT_SIBLING_PARENTS.keys()
+    }
 
     hr = rows["OBSERVATION//Heart rate///min"]
     # The variable reference's own description is kept; the LOINC name goes into the names map.
@@ -243,7 +251,7 @@ def test_dataset_json_records_the_enrichment(enriched_dir: Path, enriched: pa.Ta
     # suMEDS runs after the unit siblings got their in-dataset parent, and keeps it.
     assert record["coverage"]["with_parent_codes"] == [
         len(UNIT_SIBLING_PARENTS),
-        len(EXPECTED_PARENTS) + len(UNIT_SIBLING_PARENTS),
+        len(EXPECTED_PARENTS.keys() | UNIT_SIBLING_PARENTS.keys()),
     ]
 
 
