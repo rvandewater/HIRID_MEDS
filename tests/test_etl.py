@@ -171,11 +171,22 @@ def test_code_units(meds: pl.DataFrame, meds_dir: Path):
         "mL",
         "ml",
     )
-    # Only names whose rows differ in dose unit get it in the code; the others are unchanged.
-    assert (units["MEDICATION//Drug B"], recorded["MEDICATION//Drug B"]) == ("mL", "ml")
+    # Every medication code ends in its dose unit, also where all of a name's rows have one.
+    assert (units["MEDICATION//Drug B//ml"], recorded["MEDICATION//Drug B//ml"]) == (
+        "mL",
+        "ml",
+    )
+    meds_codes = set(
+        meds.filter(pl.col("code").str.starts_with("MEDICATION//"))["code"]
+    )
+    assert meds_codes == {
+        "MEDICATION//Drug A//mg",
+        "MEDICATION//Drug A//ml",
+        "MEDICATION//Drug B//ml",
+    }
     # Codes that differ only in their unit get the code without the unit as parent, with a row
-    # of its own: no unit, the siblings' shared description. A unit-suffixed code without a
-    # sibling gets no parent.
+    # of its own: no unit, the siblings' shared description. A code without a unit sibling gets
+    # no parent.
     assert units["MEDICATION//Drug A"] is None
     descriptions = dict(zip(codes["code"], codes["description"], strict=True))
     assert descriptions["MEDICATION//Drug A"] == descriptions["MEDICATION//Drug A//mg"]
@@ -183,7 +194,7 @@ def test_code_units(meds: pl.DataFrame, meds_dir: Path):
     parents = dict(zip(codes["code"], codes["parent_codes"].to_list(), strict=True))
     assert parents["MEDICATION//Drug A//mg"] == ["MEDICATION//Drug A"]
     assert parents["MEDICATION//Drug A//ml"] == ["MEDICATION//Drug A"]
-    assert parents["MEDICATION//Drug B"] is None
+    assert parents["MEDICATION//Drug B//ml"] is None
     assert parents["OBSERVATION//Lab A//mmol/l"] is None
     assert parents["MEDICATION//Drug A"] is None
     assert "MEDICATION//Drug A" not in set(meds["code"])  # a metadata row only

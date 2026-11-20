@@ -82,7 +82,7 @@ Some ids in the raw tables have no reference entry under their own `Source Table
 | observation | 5                           | 4                                      | 192,082           |
 | pharma      | 2                           | 2                                      | 10,074            |
 
-Their codes become `OBSERVATION//<variableid>//UNK` / `MEDICATION//<pharmaid>`, so they stay
+Their codes become `OBSERVATION//<variableid>//UNK` / `MEDICATION//<pharmaid>//<doseunit>`, so they stay
 distinct. Previously they either took the *other* table's name (via the id-only join) or were
 dropped (inner join, when the id was in neither). Whether to borrow the other table's name is open:
 [#3](https://github.com/rvandewater/HIRID_MEDS/issues/3).
@@ -93,6 +93,15 @@ The reference `Unit` column is null for **all 565** Pharma rows, so the old
 `text_value: Unit` was always null for medications. The raw `doseunit` column is never null and
 has exactly one value per `pharmaid`, so it is used instead (still as `text_value`, preserving the
 old event shape).
+
+It is also the code's `unit` and always its last component, `MEDICATION//<name>//<doseunit>`
+(`UNK` for a row without one), as the observation codes end in their `Unit`. Pharmaids that share a
+name can differ in dose unit, which would give the name's code several units; with the unit in every
+code, each code has one by construction, and no stage has to find the names that mix units. Until
+the next release only those names' codes ended in the unit, decided by a package pre-stage
+(`hirid_unit_keys`), and every other code was `MEDICATION//<name>`; see "Breaking changes" in the
+README. suMEDS's `sumeds_link_unit_siblings` gives the per-unit codes of one name the code without
+the unit as a parent.
 
 ### D5. Empty `stringvalue` becomes a null `text_value`
 

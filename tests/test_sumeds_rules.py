@@ -91,7 +91,7 @@ def test_rules_do_not_match_other_codes():
         {
             "variable_name": ["Drug A", None],
             "pharmaid": [1, 2],
-            "_unit_suffix": ["//mg", ""],
+            "doseunit": ["mg", None],
         },
     )
     other += ["SEX//M", "MEDS_BIRTH", "ICU_ADMISSION"]
