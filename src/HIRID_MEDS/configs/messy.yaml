@@ -1,4 +1,4 @@
-# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.8).
+# MESSY config for the HiRID MEDS ETL (MEDS-Extract >= 0.9).
 #
 # This single file replaces what used to be spread across four places:
 #   - `dataset.yaml`          -> the `sources:` block below
@@ -42,7 +42,21 @@ etl:
   # enrichment in metadata/dataset.json. A failed enrichment (e.g. without internet access) keeps
   # codes.parquet as the ETL wrote it and does not fail the run; `suMEDS-enrich OUTPUT_DIR` finishes
   # it later. `skip_stages=[sumeds_enrich]` leaves it out of a run.
+  #
+  # First, `hirid_unit_metadata` (src/HIRID_MEDS/unit_metadata.py) gives codes that differ only in
+  # their unit the code without the unit as parent, and adds a row for that parent code.
+  # (MEDS-Extract writes `unit` as one string per code and fails if any code has more than one.) It runs before suMEDS so that the enrichment, also a later
+  # `suMEDS-enrich`, sees the finished code list.
+  # Before the canonical pipeline, `hirid_unit_keys` (src/HIRID_MEDS/unit_keys.py) stages the
+  # side table `pharma_unit_in_code`: the pharmaids whose name is shared with rows of another dose
+  # unit, whose codes therefore end in the dose unit (see the pharma block below).
+  pre_stages:
+    - hirid_unit_keys
   post_stages:
+    - hirid_unit_metadata
+    # One UCUM spelling for every `unit` (suMEDS's shared table, e.g. `Cel`, `mm[Hg]`, `mg/dL`); the
+    # spelling as recorded stays in `unit_source_value`, and an unknown spelling is kept as it is.
+    - sumeds_normalize_units
     - sumeds_enrich: { rules: HIRID }
 
 _defaults:
@@ -165,9 +179,11 @@ general_table:
 # observation and 2 pharma ids). Their code falls back to the raw id, so they stay distinct
 # rather than all collapsing into one `UNK` code.
 #
-# The reference's `Variable Name` / `Unit` columns contain spaces, which dftly's `$name` shorthand
-# cannot express; the explicit `{column: ...}` form can, so `_table.cols` aliases them once.
-# See https://github.com/mmcdermott/dftly/issues/96.
+# The reference's `Variable Name` column contains a space, which dftly's `$name` shorthand cannot
+# express; the explicit `{column: ...}` form can, so `_table.cols` aliases it once.
+# See https://github.com/mmcdermott/dftly/issues/96. `Unit` needs no alias and the observation code
+# reads it as `$Unit`: a code component named `unit` would turn the metadata output `unit` below
+# into a join key (MEDS-Extract treats a `_metadata` entry named like a component as a key).
 # ---------------------------------------------------------------------------
 
 raw_stage/pharma_records/parquet:
@@ -177,14 +193,24 @@ raw_stage/pharma_records/parquet:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]
         cols: [Variable Name]
+      # Staged by the `hirid_unit_keys` pre-stage: `unit_in_code` is true for the pharmaids whose
+      # name is shared with rows of another dose unit, null for every other pharmaid.
+      pharma_unit_in_code:
+        left_on: _ref_id
+        right_on: pharmaid
+        cols: [unit_in_code]
     cols:
       _ref_table: "'Pharma'"
       _ref_id: "$pharmaid::int64"
       variable_name: { column: Variable Name }
+      _unit_suffix: '(f"//{$doseunit ?? ''UNK''}" if $unit_in_code else "")'
   # The dose unit is recorded on every pharma row (`doseunit`), so it is taken from there rather
-  # than from the reference table's `Unit`.
+  # than from the reference table's `Unit` (empty for every `Pharma` row). It is the code's `unit`
+  # metadata, read from the event's own rows (`_self`). A code holds one unit: where pharmaids that
+  # share a name differ in dose unit, their codes end in it (`_unit_suffix`); every other code is
+  # unchanged.
   medication:
-    code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}"'
+    code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}{$_unit_suffix}"'
     time: $givenat
     numeric_value: $givendose
     text_value: $doseunit
@@ -198,6 +224,7 @@ raw_stage/pharma_records/parquet:
         description: >-
           f"HiRID pharmaid {$pharmaid} without a Pharma entry in hirid_variable_reference (name
           unknown)" if ($variable_name ?? "") == ""
+        unit: $doseunit
 
 raw_stage/observation_tables/parquet:
   _table:
@@ -210,11 +237,10 @@ raw_stage/observation_tables/parquet:
       _ref_table: "'Observation'"
       _ref_id: "$variableid::int64"
       variable_name: { column: Variable Name }
-      unit: { column: Unit }
   # `stringvalue` is an empty string (not null) on almost every numeric row; only a real string
   # is kept as the text value.
   observation:
-    code: 'f"OBSERVATION//{$variable_name ?? $variableid::str}//{$unit ?? ''UNK''}"'
+    code: 'f"OBSERVATION//{$variable_name ?? $variableid::str}//{$Unit ?? ''UNK''}"'
     time: $datetime
     numeric_value: $value
     text_value: '$stringvalue if $stringvalue != ""'
@@ -227,6 +253,8 @@ raw_stage/observation_tables/parquet:
           $`Additional information` != "" else f"{$`Variable Name`} [{$Unit ?? 'no unit'}] (HiRID
           observation_tables, name and unit of the variableid in hirid_variable_reference)") if
           $`Source Table` == "Observation"
+        # The unit of the variableid as the reference records it (null for unitless variables).
+        unit: $Unit if $`Source Table` == "Observation"
       _self:
         description: >-
           f"HiRID observation variableid {$variableid} without an Observation entry in

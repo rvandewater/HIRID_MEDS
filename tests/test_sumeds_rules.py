@@ -65,7 +65,7 @@ def test_observation_rules_match_the_config_layout():
         {
             "variable_name": [*names, None],
             "variableid": [*ids, 300],
-            "unit": ["/min", "mmol/l", None],
+            "Unit": ["/min", "mmol/l", None],
         },
         {"variableid": pl.Int32},
     )
@@ -88,7 +88,11 @@ def test_rules_do_not_match_other_codes():
     other = _code(
         "raw_stage/pharma_records/parquet",
         "medication",
-        {"variable_name": ["Drug A", None], "pharmaid": [1, 2]},
+        {
+            "variable_name": ["Drug A", None],
+            "pharmaid": [1, 2],
+            "_unit_suffix": ["//mg", ""],
+        },
     )
     other += ["SEX//M", "MEDS_BIRTH", "HOSPITAL_ADMISSION"]
     for rule in load_rules(Path(str(RULES))).crosswalk:

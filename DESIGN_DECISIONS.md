@@ -4,7 +4,8 @@ This file records the modelling choices made in
 [`src/HIRID_MEDS/configs/messy.yaml`](src/HIRID_MEDS/configs/messy.yaml) for the MEDS-Extract 0.7
 migration ([PR #2](https://github.com/rvandewater/HIRID_MEDS/pull/2)), why they were made, and
 which ones are still open. Open questions link to their GitHub issue. The config has since moved
-to MEDS-Extract 0.8; for this config, that renames `_table.join` to `_table.joins`.
+to MEDS-Extract 0.8; for this config, that renames `_table.join` to `_table.joins`. It now requires
+0.9, which writes `unit` in `codes.parquet` as one string per code.
 
 All numbers are from HiRID **1.1.1** (`reference_data.tar.gz`,
 `raw_stage/observation_tables_parquet.tar.gz`, `raw_stage/pharma_records_parquet.tar.gz`, checksums
@@ -178,7 +179,7 @@ Each has a GitHub issue with the options and the data behind them.
     `pharma_records.recordstatus`/`typeid`/`infusionid` are ignored, as before. Some of these likely
     mark invalidated or corrected records.
 - **`UNK` placeholders** ([#6](https://github.com/rvandewater/HIRID_MEDS/issues/6), D11): keep `UNK` for "no unit", or omit the component?
-- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow installs MESSY_synth 0.1.0
+- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow installs MESSY_synth 0.1.1
     and generates from the shipped config. `tests/test_etl.py` checks specific values on a
     hand-written fixture.
 
