@@ -19,9 +19,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 # MEDS-Extract supplies both CLIs (`meds-extract-download`, `meds-extract-run`) and every extraction
-# stage; the only Python here is the `hirid_unit_keys` pre-stage registered below. It is capped below the next minor: MEDS-Extract 0.x minors are
-# breaking (MESSY syntax, runner CLI), so raise it deliberately when migrating. 0.9.0 is the floor:
-# it writes `unit` in codes.parquet as one string per code (stripped, blanks dropped, several
+# stage; this package has no Python stages of its own. It is capped below the next minor:
+# MEDS-Extract 0.x minors are breaking (MESSY syntax, runner CLI), so raise it deliberately when
+# migrating. 0.9.0 is the floor: it writes `unit` in codes.parquet as one string per code (stripped, blanks dropped, several
 # distinct units on a code an error; MEDS_extract#336). 0.8.1 added what the config also needs: it
 # runs the `etl.post_stages` the config declares, writes its dataset.json fields, and accepts the
 # `_self` blocks that describe the literal codes.
@@ -44,12 +44,6 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 # ETL is runnable as `meds-extract-run spec=HIRID output_dir=...`.
 [project.entry-points."MEDS_extract.pipelines"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
-
-# Registers the unit pre-stage as a MEDS-Transforms stage, so the config can declare it: it finds
-# the medication codes needing their dose unit in the code. Codes in codes.parquet that differ
-# only in their unit are linked by suMEDS's `sumeds_link_unit_siblings` post-stage.
-[project.entry-points."MEDS_transforms.stages"]
-hirid_unit_keys = "HIRID_MEDS.unit_keys:main"
 
 # Registers the suMEDS rules under the same name, so the config's `sumeds_enrich: {rules: HIRID}`
 # and `--rules HIRID` find them.

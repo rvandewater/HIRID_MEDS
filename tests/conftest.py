@@ -107,7 +107,9 @@ def write_raw_fixture(root: Path) -> None:
             "pharmaid": [100, 300, 400],
             "givenat": [T0.replace(hour=9), T0.replace(hour=11), T0.replace(hour=11)],
             "givendose": [5.0, 1.5, 2.5],
-            "doseunit": ["mg", "ml", "ml"],
+            # Drug B's unit is padded with whitespace, which the code drops (as `codes.parquet`
+            # does); the text value keeps it as recorded.
+            "doseunit": ["mg", " ml ", "ml"],
         },
         schema_overrides={
             "patientid": pl.Int32,

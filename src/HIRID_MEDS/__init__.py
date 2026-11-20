@@ -1,8 +1,7 @@
-"""HiRID MEDS ETL -- a MEDS-Extract pipeline: one MESSY config and one pre-stage.
+"""HiRID MEDS ETL -- a MEDS-Extract pipeline: one MESSY config.
 
-The ETL is `configs/messy.yaml`, registered under the `MEDS_extract.pipelines` entry-point group,
-plus the `hirid_unit_keys` pre-stage (`unit_keys.py`), which stages the side table of pharmaids
-whose codes end in the dose unit. `sumeds_rules.yaml` is registered under suMEDS's `sumeds.rules` group with the same name.
+The ETL is `configs/messy.yaml`, registered under the `MEDS_extract.pipelines` entry-point group.
+`sumeds_rules.yaml` is registered under suMEDS's `sumeds.rules` group with the same name.
 The config declares suMEDS's `sumeds_enrich` stage after the pipeline, so the ETL and its suMEDS
 enrichment run as:
 

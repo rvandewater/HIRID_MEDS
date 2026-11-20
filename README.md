@@ -25,8 +25,7 @@ admissions to the Department of Intensive Care Medicine of the Bern University H
 between January 2008 and June 2016, with physiological variables, diagnostic test results and
 treatment parameters recorded as often as every two minutes. It was built from the
 [ETL_MEDS_Template](https://github.com/Medical-Event-Data-Standard/ETL_MEDS_Template) and uses the
-config-only layout introduced by [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) 0.7, with
-one Python pre-stage (`hirid_unit_keys`).
+config-only layout introduced by [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) 0.7.
 
 The ETL maps the patient table, the variable reference and the two `raw_stage` tables (observations
 and pharma records). It never downloads or reads the `merged_stage` / `imputed_stage` derivatives or
@@ -146,18 +145,19 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 
 ## Events
 
-| Table                          | Event codes                            | Notes                                                                                                                                       |
-| ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `general_table`                | `ICU_ADMISSION`, `SEX//{sex}`          | Admission at `admissiontime`; sex is static.                                                                                                |
-|                                | `MEDS_BIRTH`                           | `admissiontime` minus `age` years.                                                                                                          |
-|                                | `ICU_DISCHARGE`, `MEDS_DEATH`          | Both at the patient's last observation; death only when `discharge_status` is not `alive`.                                                  |
-| `raw_stage/observation_tables` | `OBSERVATION//{Variable Name}//{Unit}` | `value` is the `numeric_value`; a non-empty `stringvalue` is the `text_value`.                                                              |
-| `raw_stage/pharma_records`     | `MEDICATION//{Variable Name}`          | `givendose` is the `numeric_value`; `doseunit` is the `text_value`. Names whose rows differ in dose unit end in `//{doseunit}` (see Units). |
+| Table                          | Event codes                               | Notes                                                                                                                 |
+| ------------------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `general_table`                | `ICU_ADMISSION`, `SEX//{sex}`             | Admission at `admissiontime`; sex is static.                                                                          |
+|                                | `MEDS_BIRTH`                              | `admissiontime` minus `age` years.                                                                                    |
+|                                | `ICU_DISCHARGE`, `MEDS_DEATH`             | Both at the patient's last observation; death only when `discharge_status` is not `alive`.                            |
+| `raw_stage/observation_tables` | `OBSERVATION//{Variable Name}//{Unit}`    | `value` is the `numeric_value`; a non-empty `stringvalue` is the `text_value`.                                        |
+| `raw_stage/pharma_records`     | `MEDICATION//{Variable Name}//{doseunit}` | `givendose` is the `numeric_value`; `doseunit` is the `text_value` and the code's last component (see Code metadata). |
 
 `Variable Name` and `Unit` come from `hirid_variable_reference`, matched on the raw id **and** its
 `Source Table`, since one id is listed as both an observation and a drug. An id with no reference
 entry for its own table keeps its raw id in the code (`OBSERVATION//<variableid>//UNK`,
-`MEDICATION//<pharmaid>`). A missing sex or unit becomes `UNK`.
+`MEDICATION//<pharmaid>//<doseunit>`). A missing sex or unit becomes `UNK`; a dose unit in a code is
+stripped of surrounding whitespace, and a blank one is `UNK` too.
 
 A full run of HiRID 1.1.1 yields 33,905 ICU admissions, 33,904 ICU discharges, 2,062 deaths, 16.25M
 medication events and 758.65M observation events. See
@@ -193,13 +193,13 @@ dictionary, joined at ETL time. The ETL adds no vocabulary parents (no `parent_c
 LOINC parents from the packaged rules file (see
 [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-| Codes                                                        | Route                                                                                                                  | Source                                                                                                                                           |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OBSERVATION//{Variable Name}//{Unit}`                       | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
-| `MEDICATION//{Variable Name}`                                | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
-| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>`   | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
-| `SEX//{sex}`                                                 | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
-| `ICU_ADMISSION`, `ICU_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
+| Codes                                                                  | Route                                                                                                                  | Source                                                                                                                                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OBSERVATION//{Variable Name}//{Unit}`                                 | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
+| `MEDICATION//{Variable Name}//{doseunit}`                              | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
+| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>//<doseunit>` | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
+| `SEX//{sex}`                                                           | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
+| `ICU_ADMISSION`, `ICU_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`           | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
 
 **Units.** `unit` is a string: the unit of the code's numeric values, one per code (null for codes
 without one), written in [UCUM](https://ucum.org/) by suMEDS's `sumeds_normalize_units` post-stage
@@ -214,13 +214,13 @@ additional information state no further units: of the observation variables with
 has a bracketed unit in its name, and the few bracketed tokens in drug names are not the drugs'
 dose units, which the data records anyway.
 
-Every pharmaid has one dose unit, but pharmaids that share a name may not. Only the codes of such
-names get the dose unit as their last component (`MEDICATION//{Variable Name}//{doseunit}`), so
-that each code has one unit; every other medication code is unchanged, because renaming codes that
-already have one unit would break downstream references to them for nothing. Which names these are
-depends on the data: the pre-stage `hirid_unit_keys` (`src/HIRID_MEDS/unit_keys.py`) stages the
-side table `pharma_unit_in_code` that the pharma block joins. On HiRID 1.1.1 one medication code
-changes: it becomes three codes, one per dose unit.
+Medication codes always end in their dose unit (`MEDICATION//{Variable Name}//{doseunit}`; the unit
+is stripped of surrounding whitespace, and a missing or blank one is `UNK`), as observation codes
+end in their `Unit`. The stripping matches how MEDS-Extract compares units when it writes `unit`
+(stripped, blanks dropped), so ` mg` and `mg` give one code. Every pharmaid has one dose unit,
+but pharmaids that share a name may not; with the unit in every code, each code has one unit by
+construction, and no stage has to find the names whose rows differ in dose unit. On HiRID 1.1.1 one
+name is recorded in three dose units, which gives three codes.
 
 MEDS-Extract (0.9 and later) writes `unit` as one string per code and fails if any code has more
 than one unit. suMEDS's shared post-stage `sumeds_link_unit_siblings`
@@ -383,6 +383,31 @@ upgrade can also move the output, so check it with `--compare`.
 ## Breaking changes
 
 ### Unreleased
+
+- **Every medication code ends in its dose unit**: `MEDICATION//{Variable Name}//{doseunit}` (and
+    `MEDICATION//<pharmaid>//{doseunit}` for a pharmaid without a reference entry), with the unit
+    stripped of surrounding whitespace and `//UNK` for a row whose unit is missing or blank. Before, only the codes of names whose rows differed in dose unit ended in
+    it, which took a package pre-stage (`hirid_unit_keys`, now removed) and a side table to decide;
+    now every code has one unit by construction, as the observation codes do, and suMEDS's
+    `sumeds_link_unit_siblings` still gives the code without the unit as the parent of a name's
+    per-unit codes (see [Code metadata](#code-metadata)). Events, values, times and each code's
+    `unit`, `unit_source_value`, description and other parents are unchanged; only the code string changes.
+    On HiRID 1.1.1, `doseunit` is never null and each pharmaid has one, so every medication code
+    except the three of the one name recorded in several units gains `//<doseunit>`, and the number
+    of codes stays the same (confirming the exact counts needs a credentialed rebuild). On a
+    synthetic MESSY-synth build, 60 of the 140 medication codes change name and become 63 (3 codes
+    whose rows mix a unit with none become `…//<unit>` and `…//UNK`, with the old code as parent).
+
+    | up to 0.2.0                      | from the next release                       |
+    | -------------------------------- | ------------------------------------------- |
+    | `MEDICATION//{Variable Name}`    | `MEDICATION//{Variable Name}//{doseunit}`   |
+    | `MEDICATION//<pharmaid>`         | `MEDICATION//<pharmaid>//{doseunit}`        |
+    | `MEDICATION//{name}//{doseunit}` | unchanged (names recorded in several units) |
+
+    The unit cannot be derived from the old code, so migrate by comparing without it: strip the last
+    component (`^(MEDICATION//.*)//.*$` → `\1`, the greedy group ending at the last `//`) to compare
+    with an old code, or match all codes of a drug in both versions with
+    `^MEDICATION//<name>(//.*)?$`.
 
 - **ICU stays are coded `ICU_ADMISSION` / `ICU_DISCHARGE`.** Each HiRID `patientid` is one ICU
     admission, and the release has no hospital admission, so the codes that marked the start and
