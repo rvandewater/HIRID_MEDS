@@ -25,7 +25,8 @@ admissions to the Department of Intensive Care Medicine of the Bern University H
 between January 2008 and June 2016, with physiological variables, diagnostic test results and
 treatment parameters recorded as often as every two minutes. It was built from the
 [ETL_MEDS_Template](https://github.com/Medical-Event-Data-Standard/ETL_MEDS_Template) and uses the
-config-only layout introduced by [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) 0.7.
+config-only layout introduced by [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) 0.7, with
+one Python pre-stage (`hirid_unit_keys`).
 
 The ETL maps the patient table, the variable reference and the two `raw_stage` tables (observations
 and pharma records). It never downloads or reads the `merged_stage` / `imputed_stage` derivatives or
@@ -345,7 +346,7 @@ event block yields no events.
 
 ```bash
 uv sync
-uv run pytest tests/ -v
+uv run pytest -v
 uv run pre-commit run --all-files
 ```
 
@@ -412,6 +413,11 @@ upgrade can also move the output, so check it with `--compare`.
     To migrate, replace the codes, e.g. with the regex `^HOSPITAL_(ADMISSION|DISCHARGE)$` →
     `ICU_\1`. A task or predicate written for both versions can match
     `^(HOSPITAL|ICU)_ADMISSION$`.
+
+- `metadata/dataset.json` `dataset_name` is `HIRID` instead of `hirid`, the spec name
+    (`meds-extract-run spec=HIRID`) that the suMEDS rules and MEDS-DEV (`datasets/HIRID`) also use.
+    Codes and events do not change. To migrate, compare the name case-insensitively, or replace
+    `hirid` with `HIRID`.
 
 ## Citation
 

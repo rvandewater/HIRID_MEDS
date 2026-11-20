@@ -5,12 +5,14 @@ broken before: join keys of mismatched dtypes, and an `ID` that is listed under 
 Table`s. Every value in it is made up.
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
 
 import polars as pl
 import pyarrow.parquet as pq
 from conftest import T0
+from HIRID_MEDS import PIPELINE_NAME
 from meds import CodeMetadataSchema
 from MEDS_extract.config import MessyConfig
 
@@ -187,3 +189,9 @@ def test_code_units(meds: pl.DataFrame, meds_dir: Path):
     assert "MEDICATION//Drug A" not in set(meds["code"])  # a metadata row only
     assert units["SEX//F"] is None
     assert units["ICU_ADMISSION"] is None
+
+
+def test_dataset_name_is_the_spec_name(meds_dir: Path):
+    """`dataset.json` names the dataset as the spec, the suMEDS rules and MEDS-DEV do."""
+    info = json.loads((meds_dir / "metadata" / "dataset.json").read_text())
+    assert info["dataset_name"] == PIPELINE_NAME == "HIRID"

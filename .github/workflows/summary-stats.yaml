@@ -32,7 +32,8 @@ jobs:
 
       - name: Check that ETL changes regenerated the baseline
         # Documentation does not affect what the ETL writes. The suMEDS rules do: the baseline is
-        # built with suMEDS-extract, which enriches metadata/codes.parquet with them.
+        # built by `meds-extract-run spec=HIRID`, whose sumeds_enrich post-stage enriches
+        # metadata/codes.parquet with them.
         run: |
           changed=$(git diff --name-only HEAD^1 HEAD)
           etl=$(grep -E '^src/' <<<"$changed" | grep -vE '\.md$' || true)

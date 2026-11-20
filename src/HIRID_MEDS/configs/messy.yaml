@@ -32,7 +32,8 @@ sources:
         - raw_stage/pharma_records_parquet.tar.gz
 
 etl:
-  dataset_name: hirid
+  # The spec name, as every other MEDS ETL writes it (and the name suMEDS falls back to for its rules).
+  dataset_name: HIRID
   # Delete the <output_dir>/<stage> dirs after a successful run; keep: "overrides=['cleanup_intermediates=false']"
   cleanup_intermediates: true
   n_subjects_per_shard: 1000

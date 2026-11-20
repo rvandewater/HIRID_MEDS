@@ -51,7 +51,7 @@ def test_rules_are_package_data():
 
 
 def test_rules_are_registered_under_the_spec_name():
-    """`suMEDS-extract spec=HIRID` and `--rules HIRID` find the rules by this entry point."""
+    """The spec's `sumeds_enrich: {rules: HIRID}` and `--rules HIRID` find the rules by this entry point."""
     assert "HIRID" in registered_rules()
     assert registered_rules()["HIRID"] == "HIRID_MEDS:sumeds_rules.yaml"
     assert load_rules("HIRID") == load_rules(Path(str(RULES)))
