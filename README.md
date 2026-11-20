@@ -156,7 +156,8 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 `Variable Name` and `Unit` come from `hirid_variable_reference`, matched on the raw id **and** its
 `Source Table`, since one id is listed as both an observation and a drug. An id with no reference
 entry for its own table keeps its raw id in the code (`OBSERVATION//<variableid>//UNK`,
-`MEDICATION//<pharmaid>//<doseunit>`). A missing sex or unit becomes `UNK`.
+`MEDICATION//<pharmaid>//<doseunit>`). A missing sex or unit becomes `UNK`; a dose unit in a code is
+stripped of surrounding whitespace, and a blank one is `UNK` too.
 
 A full run of HiRID 1.1.1 yields 33,905 ICU admissions, 33,904 ICU discharges, 2,062 deaths, 16.25M
 medication events and 758.65M observation events. See
@@ -213,8 +214,10 @@ additional information state no further units: of the observation variables with
 has a bracketed unit in its name, and the few bracketed tokens in drug names are not the drugs'
 dose units, which the data records anyway.
 
-Medication codes always end in their dose unit (`MEDICATION//{Variable Name}//{doseunit}`, `UNK`
-for a row without one), as observation codes end in their `Unit`. Every pharmaid has one dose unit,
+Medication codes always end in their dose unit (`MEDICATION//{Variable Name}//{doseunit}`; the unit
+is stripped of surrounding whitespace, and a missing or blank one is `UNK`), as observation codes
+end in their `Unit`. The stripping matches how MEDS-Extract compares units when it writes `unit`
+(stripped, blanks dropped), so ` mg` and `mg` give one code. Every pharmaid has one dose unit,
 but pharmaids that share a name may not; with the unit in every code, each code has one unit by
 construction, and no stage has to find the names whose rows differ in dose unit. On HiRID 1.1.1 one
 name is recorded in three dose units, which gives three codes.
@@ -382,8 +385,8 @@ upgrade can also move the output, so check it with `--compare`.
 ### Unreleased
 
 - **Every medication code ends in its dose unit**: `MEDICATION//{Variable Name}//{doseunit}` (and
-    `MEDICATION//<pharmaid>//{doseunit}` for a pharmaid without a reference entry), with `//UNK` for
-    a row without a unit. Before, only the codes of names whose rows differed in dose unit ended in
+    `MEDICATION//<pharmaid>//{doseunit}` for a pharmaid without a reference entry), with the unit
+    stripped of surrounding whitespace and `//UNK` for a row whose unit is missing or blank. Before, only the codes of names whose rows differed in dose unit ended in
     it, which took a package pre-stage (`hirid_unit_keys`, now removed) and a side table to decide;
     now every code has one unit by construction, as the observation codes do, and suMEDS's
     `sumeds_link_unit_siblings` still gives the code without the unit as the parent of a name's

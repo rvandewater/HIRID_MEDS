@@ -95,7 +95,8 @@ has exactly one value per `pharmaid`, so it is used instead (still as `text_valu
 old event shape).
 
 It is also the code's `unit` and always its last component, `MEDICATION//<name>//<doseunit>`
-(`UNK` for a row without one), as the observation codes end in their `Unit`. Pharmaids that share a
+(stripped of surrounding whitespace; `UNK` for a row whose unit is missing or blank, as
+MEDS-Extract drops blank units), as the observation codes end in their `Unit`. Pharmaids that share a
 name can differ in dose unit, which would give the name's code several units; with the unit in every
 code, each code has one by construction, and no stage has to find the names that mix units. Until
 the next release only those names' codes ended in the unit, decided by a package pre-stage

@@ -71,7 +71,8 @@ def test_text_values(meds: pl.DataFrame):
     med = meds.filter(pl.col("code").str.starts_with("MEDICATION")).sort(
         "subject_id", "code"
     )
-    assert med["text_value"].to_list() == ["mg", "ml", "ml"]
+    # As recorded: Drug B's padded unit keeps its whitespace here, not in its code.
+    assert med["text_value"].to_list() == ["mg", "ml", " ml "]
     assert med["numeric_value"].to_list() == [5.0, 2.5, 1.5]
 
 

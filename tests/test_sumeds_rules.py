@@ -24,10 +24,20 @@ CONFIG_FP = Path(__file__).parents[1] / "src" / "HIRID_MEDS" / "configs" / "mess
 
 
 def _code(table: str, event: str, rows: dict, schema: dict | None = None) -> list[str]:
-    """Evaluate the code template of ``table``/``event`` in the config on ``rows``."""
-    expr = yaml.safe_load(CONFIG_FP.read_text())[table][event]["code"]
+    """Evaluate the code template of ``table``/``event`` in the config on ``rows``.
+
+    The table's derived `_table.cols` (such as the stripped dose unit) are computed first, where
+    ``rows`` holds their inputs; the ones read from a join (`Variable Name`) are given in ``rows``.
+    """
+    config = yaml.safe_load(CONFIG_FP.read_text())[table]
     df = pl.DataFrame(rows, schema_overrides=schema)
-    return df.select(Parser()(expr).polars_expr).to_series().to_list()
+    for name, col_expr in config.get("_table", {}).get("cols", {}).items():
+        if name not in df.columns:
+            try:
+                df = df.with_columns(**Parser.to_polars({name: col_expr}))
+            except pl.exceptions.ColumnNotFoundError:
+                continue
+    return df.select(Parser()(config[event]["code"]).polars_expr).to_series().to_list()
 
 
 def _crosswalk(rule_id: str) -> CrosswalkRule:
