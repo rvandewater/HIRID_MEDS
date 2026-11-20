@@ -213,8 +213,8 @@ Every pharmaid has one dose unit, but pharmaids that share a name may not. Only 
 names get the dose unit as their last component (`MEDICATION//{Variable Name}//{doseunit}`), so
 that each code has one unit; every other medication code is unchanged, because renaming codes that
 already have one unit would break downstream references to them for nothing. Which names these are
-depends on the data: the pre-stage `hirid_unit_keys` (`src/HIRID_MEDS/unit_keys.py`) stages the
-side table `pharma_unit_in_code` that the pharma block joins. On HiRID 1.1.1 one medication code
+depends on the data: MEDS-Extract's pre-stage `mixed_unit_keys`, configured under `etl.pre_stages`
+of `configs/messy.yaml`, stages the side table `pharma_unit_in_code` that the pharma block joins. On HiRID 1.1.1 one medication code
 changes: it becomes three codes, one per dose unit.
 
 MEDS-Extract (0.9 and later) writes `unit` as one string per code and fails if any code has more

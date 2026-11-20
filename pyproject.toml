@@ -36,6 +36,11 @@ dependencies = [
     "sumeds>=0.6.7,<0.7",
 ]
 
+# DRAFT: MEDS-Extract's `mixed_unit_keys` pre-stage is not released yet (mmcdermott/MEDS_extract#339,
+# pinned to its head commit). Drop this source and raise the floor to that release once it is out.
+[tool.uv.sources]
+meds-extract = { git = "https://github.com/mmcdermott/MEDS_extract", rev = "a8763c260bd87e5c11d4a2623d85854851e47628" }
+
 [project.optional-dependencies]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
@@ -44,12 +49,6 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 # ETL is runnable as `meds-extract-run spec=HIRID output_dir=...`.
 [project.entry-points."MEDS_extract.pipelines"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
-
-# Registers the unit pre-stage as a MEDS-Transforms stage, so the config can declare it: it finds
-# the medication codes needing their dose unit in the code. Codes in codes.parquet that differ
-# only in their unit are linked by suMEDS's `sumeds_link_unit_siblings` post-stage.
-[project.entry-points."MEDS_transforms.stages"]
-hirid_unit_keys = "HIRID_MEDS.unit_keys:main"
 
 # Registers the suMEDS rules under the same name, so the config's `sumeds_enrich: {rules: HIRID}`
 # and `--rules HIRID` find them.

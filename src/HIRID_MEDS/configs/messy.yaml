@@ -49,11 +49,19 @@ etl:
   # without the unit as parent, and adds a row for that parent code. (MEDS-Extract writes `unit` as
   # one string per code and fails if any code has more than one.) It runs before the other suMEDS
   # stages so that the enrichment, also a later `suMEDS-enrich`, sees the finished code list.
-  # Before the canonical pipeline, `hirid_unit_keys` (src/HIRID_MEDS/unit_keys.py) stages the
-  # side table `pharma_unit_in_code`: the pharmaids whose name is shared with rows of another dose
-  # unit, whose codes therefore end in the dose unit (see the pharma block below).
+  # Before the canonical pipeline, MEDS-Extract's `mixed_unit_keys` pre-stage stages the side table
+  # `pharma_unit_in_code`: the pharmaids whose name (as in the code: the reference's `Variable Name`,
+  # else the pharmaid) is shared with rows of another dose unit, whose codes therefore end in the dose
+  # unit (see the pharma block below). Dose units are compared stripped, nulls and blanks left out.
   pre_stages:
-    - hirid_unit_keys
+    - mixed_unit_keys:
+        side_tables:
+          pharma_unit_in_code:
+            table: raw_stage/pharma_records/parquet
+            keys: { pharmaid: $_ref_id }
+            group_by: $variable_name ?? $pharmaid::str
+            flags:
+              unit_in_code: { unit: $doseunit }
   post_stages:
     - sumeds_link_unit_siblings
     # One UCUM spelling for every `unit` (suMEDS's shared table, e.g. `Cel`, `mm[Hg]`, `mg/dL`); the
@@ -195,7 +203,7 @@ raw_stage/pharma_records/parquet:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]
         cols: [Variable Name]
-      # Staged by the `hirid_unit_keys` pre-stage: `unit_in_code` is true for the pharmaids whose
+      # Staged by the `mixed_unit_keys` pre-stage: `unit_in_code` is true for the pharmaids whose
       # name is shared with rows of another dose unit, null for every other pharmaid.
       pharma_unit_in_code:
         left_on: _ref_id
