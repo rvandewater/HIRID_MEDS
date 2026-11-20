@@ -124,8 +124,8 @@ ETL code and no suMEDS code. The file declares:
 - **`sources:`**: where the raw data lives (the PhysioNet release, restricted to the three archives
     above, unpacked after download).
 - **`etl:`**: the dataset name and sharding options, the license and PhysioNet page written to
-    `metadata/dataset.json`, and the suMEDS enrichment that runs after the pipeline
-    (`post_stages`).
+    `metadata/dataset.json`, and the stages that run after the pipeline (`post_stages`): unit
+    siblings, suMEDS's UCUM units and the suMEDS enrichment.
 - **One block per raw table**: how each row becomes one or more MEDS events, and which tables it is
     joined with.
 
@@ -145,13 +145,13 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 
 ## Events
 
-| Table                          | Event codes                            | Notes                                                                                      |
-| ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `general_table`                | `HOSPITAL_ADMISSION`, `SEX//{sex}`     | Admission at `admissiontime`; sex is static.                                               |
-|                                | `MEDS_BIRTH`                           | `admissiontime` minus `age` years.                                                         |
-|                                | `HOSPITAL_DISCHARGE`, `MEDS_DEATH`     | Both at the patient's last observation; death only when `discharge_status` is not `alive`. |
-| `raw_stage/observation_tables` | `OBSERVATION//{Variable Name}//{Unit}` | `value` is the `numeric_value`; a non-empty `stringvalue` is the `text_value`.             |
-| `raw_stage/pharma_records`     | `MEDICATION//{Variable Name}`          | `givendose` is the `numeric_value`; `doseunit` is the `text_value`.                        |
+| Table                          | Event codes                            | Notes                                                                                                                                       |
+| ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `general_table`                | `HOSPITAL_ADMISSION`, `SEX//{sex}`     | Admission at `admissiontime`; sex is static.                                                                                                |
+|                                | `MEDS_BIRTH`                           | `admissiontime` minus `age` years.                                                                                                          |
+|                                | `HOSPITAL_DISCHARGE`, `MEDS_DEATH`     | Both at the patient's last observation; death only when `discharge_status` is not `alive`.                                                  |
+| `raw_stage/observation_tables` | `OBSERVATION//{Variable Name}//{Unit}` | `value` is the `numeric_value`; a non-empty `stringvalue` is the `text_value`.                                                              |
+| `raw_stage/pharma_records`     | `MEDICATION//{Variable Name}`          | `givendose` is the `numeric_value`; `doseunit` is the `text_value`. Names whose rows differ in dose unit end in `//{doseunit}` (see Units). |
 
 `Variable Name` and `Unit` come from `hirid_variable_reference`, matched on the raw id **and** its
 `Source Table`, since one id is listed as both an observation and a drug. An id with no reference
@@ -196,13 +196,34 @@ LOINC parents from the packaged rules file (see
 | `SEX//{sex}`                                                           | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
 | `HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
 
-**Units.** The `unit` column (List(String), as MEDS-Extract writes extra metadata) holds each
-code's unit as recorded, so tools can read it without parsing the code; the codes keep their unit
-segment unchanged. `OBSERVATION` codes get the `Unit` of their variableid in
-`hirid_variable_reference` (the same external block as the description; null for unitless
-variables and ids without a reference entry). `MEDICATION` codes get the `doseunit` of their own
-rows (a `_self` block), because the reference's `Unit` is empty for every `Pharma` row; a drug name
-shared by pharmaids with different dose units gets the list of both.
+**Units.** `unit` is a string: the unit of the code's numeric values, one per code (null for codes
+without one), written in [UCUM](https://ucum.org/) by suMEDS's `sumeds_normalize_units` post-stage
+(`mmol/l` becomes `mmol/L`, `ml` becomes `mL`). The spelling as recorded stays in
+`unit_source_value`, a spelling suMEDS does not know is kept as it is, and the codes keep their names
+(`MEDICATION//X//ml` stays). `OBSERVATION` codes get the
+`Unit` of their variableid in `hirid_variable_reference` (the same external block as the
+description, and the code's last component; null for unitless variables and ids without a
+reference entry). `MEDICATION` codes get the `doseunit` of their own rows (a `_self` block),
+because the reference's `Unit` is empty for every `Pharma` row. The reference's names and
+additional information state no further units: of the observation variables without a `Unit`, none
+has a bracketed unit in its name, and the few bracketed tokens in drug names are not the drugs'
+dose units, which the data records anyway.
+
+Every pharmaid has one dose unit, but pharmaids that share a name may not. Only the codes of such
+names get the dose unit as their last component (`MEDICATION//{Variable Name}//{doseunit}`), so
+that each code has one unit; every other medication code is unchanged, because renaming codes that
+already have one unit would break downstream references to them for nothing. Which names these are
+depends on the data: the pre-stage `hirid_unit_keys` (`src/HIRID_MEDS/unit_keys.py`) stages the
+side table `pharma_unit_in_code` that the pharma block joins. On HiRID 1.1.1 one medication code
+changes: it becomes three codes, one per dose unit.
+
+MEDS-Extract (0.9 and later) writes `unit` as one string per code and fails if any code has more
+than one unit. The post-stage `hirid_unit_metadata` (`src/HIRID_MEDS/unit_metadata.py`, declared in
+`etl.post_stages` before suMEDS, so the enrichment sees the finished code list) gives codes that
+differ only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
+(`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit, the description its
+siblings share (or, if they differ only by their own unit, that description without it), and the
+parents they all have. On HiRID 1.1.1 that is 1 group of 3 codes and 1 added row.
 
 The dictionary is joined rather than evaluated per event because `observation_tables` has ~777M
 rows: an external `_metadata` table is read once per shard, while a `_self` value is carried on
@@ -231,7 +252,7 @@ Vocabulary work (LOINC tables, ontology checks) lives in
 rules for it, [`src/HIRID_MEDS/sumeds_rules.yaml`](src/HIRID_MEDS/sumeds_rules.yaml), registered in
 suMEDS's `sumeds.rules` entry-point group under the same name as the MEDS-Extract spec, `HIRID`.
 The config declares suMEDS's `sumeds_enrich` stage after the canonical pipeline
-(`etl.post_stages`), so `meds-extract-run spec=HIRID` enriches the finished
+(`etl.post_stages`, after `hirid_unit_metadata` and suMEDS's `sumeds_normalize_units`), so `meds-extract-run spec=HIRID` enriches the finished
 `metadata/codes.parquet` in place, and it stays valid MEDS code metadata. `--rules HIRID` works for
 any suMEDS command. By default the LOINC data and the HiRID crosswalk come from suMEDS's versioned
 ontology data (sumeds-ontologies, pinned release), fetched from GitHub on first use and cached; no
@@ -315,7 +336,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development and release workflo
 synthetic ETL locally:
 
 ```bash
-uv pip install "MESSY_synth==0.1.0"
+uv pip install "MESSY_synth==0.1.1"
 uv run MESSY-synth HIRID -o raw_synthetic/ --explain
 uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_synthetic do_download=false
 ```

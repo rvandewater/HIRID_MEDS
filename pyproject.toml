@@ -20,8 +20,10 @@ classifiers = [
 ]
 # Pure-config ETL: MEDS-Extract supplies both CLIs (`meds-extract-download`, `meds-extract-run`)
 # and every extraction stage. It is capped below the next minor: MEDS-Extract 0.x minors are
-# breaking (MESSY syntax, runner CLI), so raise it deliberately when migrating. 0.8.1 is the floor:
-# it runs the `etl.post_stages` the config declares, writes its dataset.json fields, and accepts the
+# breaking (MESSY syntax, runner CLI), so raise it deliberately when migrating. 0.9.0 is the floor:
+# it writes `unit` in codes.parquet as one string per code (stripped, blanks dropped, several
+# distinct units on a code an error; MEDS_extract#336). 0.8.1 added what the config also needs: it
+# runs the `etl.post_stages` the config declares, writes its dataset.json fields, and accepts the
 # `_self` blocks that describe the literal codes.
 # suMEDS 0.6.2 registers the `sumeds_enrich` stage the config declares as a post-stage, which
 # enriches the code metadata with the rules registered below. A failed enrichment is a warning that
@@ -29,8 +31,8 @@ classifiers = [
 # build was enriched. 0.6 writes the relationship names as code-to-name maps. It is capped below the
 # next minor for the same reason (its rules format and CLI are 0.x).
 dependencies = [
-    "MEDS-extract[download]>=0.8.1,<0.9",
-    "sumeds>=0.6.2,<0.7",
+    "MEDS-extract[download]>=0.9.0,<0.10",
+    "sumeds>=0.6.5,<0.7",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +43,13 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 # ETL is runnable as `meds-extract-run spec=HIRID output_dir=...`.
 [project.entry-points."MEDS_extract.pipelines"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
+
+# Registers the unit steps as MEDS-Transforms stages, so the config can declare them: the
+# pre-stage that finds the medication codes needing their dose unit in the code, and the
+# post-stage that links codes in codes.parquet that differ only in their unit.
+[project.entry-points."MEDS_transforms.stages"]
+hirid_unit_metadata = "HIRID_MEDS.unit_metadata:main"
+hirid_unit_keys = "HIRID_MEDS.unit_keys:main"
 
 # Registers the suMEDS rules under the same name, so the config's `sumeds_enrich: {rules: HIRID}`
 # and `--rules HIRID` find them.
