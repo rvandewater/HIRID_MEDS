@@ -28,4 +28,5 @@ jobs:
         run: uv sync --locked
 
       - name: Run tests
-        run: uv run pytest tests -v
+        # No path: pyproject's `testpaths` runs tests/ and the doctests in src/ (`--doctest-modules`).
+        run: uv run pytest -v
