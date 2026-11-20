@@ -78,7 +78,7 @@ _defaults:
 #   - a `_self` block, evaluated on the event's own rows. It is used for `SEX//...` and for the
 #     fallback codes of ids without a reference entry, where it is null on every other row.
 #
-# Literal codes (`HOSPITAL_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no external block
+# Literal codes (`ICU_ADMISSION`, `MEDS_BIRTH`, ...) have no components, so no external block
 # can join onto them. Each carries a `_self` block with a constant description instead (MEDS-Extract
 # >= 0.8.1), and a comment above it names the HiRID documentation it paraphrases. These are the
 # descriptions the `hirid-meds-describe-codes` step used to fill in after the run.
@@ -117,7 +117,7 @@ general_table:
       date_of_birth: "$_admitted - $age::years"
       date_of_death: "$datetime if $_died"
   admission:
-    code: HOSPITAL_ADMISSION
+    code: ICU_ADMISSION
     time: $_admitted
     _metadata:
       _self:
@@ -126,7 +126,7 @@ general_table:
         # https://hirid.intensivecare.ai/data-details).
         description: >-
           "ICU admission, at general_table.admissiontime (date-shifted). HiRID covers stays in the
-          intensive care unit only; the code keeps the name used by earlier releases of this ETL."
+          intensive care unit only; each patientid is one ICU admission."
   sex:
     code: 'f"SEX//{$sex ?? ''UNK''}"'
     time: null
@@ -158,15 +158,14 @@ general_table:
           is not 'alive'; a missing status is not counted. Placed at the stay's last observation
           because HiRID records no time of death."
   discharge:
-    code: HOSPITAL_DISCHARGE
+    code: ICU_DISCHARGE
     time: $datetime
     _metadata:
       _self:
         # DESIGN_DECISIONS.md D8; README Data notes (issue #4).
         description: >-
           "ICU discharge, placed at the stay's last observation (latest observation_tables.datetime)
-          because HiRID records no discharge time; the code keeps the name used by earlier releases
-          of this ETL."
+          because HiRID records no discharge time."
 
 # ---------------------------------------------------------------------------
 # The two raw_stage tables are parquet with native timestamp columns, so `time` needs no cast.

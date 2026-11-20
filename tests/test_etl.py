@@ -17,17 +17,17 @@ from meds import CodeMetadataSchema
 from MEDS_extract.config import MessyConfig
 
 # The descriptions of the literal codes, which the `_self` blocks of `configs/messy.yaml` write. They
-# are exactly the ones the removed `hirid-meds-describe-codes` step filled in after the run, from
-# `metadata/static_code_descriptions.csv`.
+# are the ones the removed `hirid-meds-describe-codes` step filled in after the run, from
+# `metadata/static_code_descriptions.csv`, except that the ICU admission and discharge codes, named
+# `HOSPITAL_ADMISSION`/`HOSPITAL_DISCHARGE` up to 0.2.0, no longer say that they keep the old name.
 LITERAL_DESCRIPTIONS = {
-    "HOSPITAL_ADMISSION": (
+    "ICU_ADMISSION": (
         "ICU admission, at general_table.admissiontime (date-shifted). HiRID covers stays in the "
-        "intensive care unit only; the code keeps the name used by earlier releases of this ETL."
+        "intensive care unit only; each patientid is one ICU admission."
     ),
-    "HOSPITAL_DISCHARGE": (
+    "ICU_DISCHARGE": (
         "ICU discharge, placed at the stay's last observation (latest "
-        "observation_tables.datetime) because HiRID records no discharge time; the code keeps the "
-        "name used by earlier releases of this ETL."
+        "observation_tables.datetime) because HiRID records no discharge time."
     ),
     "MEDS_BIRTH": (
         "Pseudo date of birth: general_table.admissiontime minus general_table.age in years. "
@@ -80,9 +80,9 @@ def test_patient_events(meds: pl.DataFrame):
         df = meds.filter(pl.col("code") == code)
         return dict(zip(df["subject_id"], df["time"], strict=True))
 
-    assert times("HOSPITAL_ADMISSION") == {1: T0, 2: T0, 3: T0}
+    assert times("ICU_ADMISSION") == {1: T0, 2: T0, 3: T0}
     # Discharge is the last observation; patient 3 has none, so no discharge.
-    assert times("HOSPITAL_DISCHARGE") == {
+    assert times("ICU_DISCHARGE") == {
         1: T0.replace(hour=10),
         2: T0.replace(hour=12),
     }
@@ -188,7 +188,7 @@ def test_code_units(meds: pl.DataFrame, meds_dir: Path):
     assert parents["MEDICATION//Drug A"] is None
     assert "MEDICATION//Drug A" not in set(meds["code"])  # a metadata row only
     assert units["SEX//F"] is None
-    assert units["HOSPITAL_ADMISSION"] is None
+    assert units["ICU_ADMISSION"] is None
 
 
 def test_dataset_name_is_the_spec_name(meds_dir: Path):

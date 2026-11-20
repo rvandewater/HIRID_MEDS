@@ -148,9 +148,9 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 
 | Table                          | Event codes                            | Notes                                                                                                                                       |
 | ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `general_table`                | `HOSPITAL_ADMISSION`, `SEX//{sex}`     | Admission at `admissiontime`; sex is static.                                                                                                |
+| `general_table`                | `ICU_ADMISSION`, `SEX//{sex}`          | Admission at `admissiontime`; sex is static.                                                                                                |
 |                                | `MEDS_BIRTH`                           | `admissiontime` minus `age` years.                                                                                                          |
-|                                | `HOSPITAL_DISCHARGE`, `MEDS_DEATH`     | Both at the patient's last observation; death only when `discharge_status` is not `alive`.                                                  |
+|                                | `ICU_DISCHARGE`, `MEDS_DEATH`          | Both at the patient's last observation; death only when `discharge_status` is not `alive`.                                                  |
 | `raw_stage/observation_tables` | `OBSERVATION//{Variable Name}//{Unit}` | `value` is the `numeric_value`; a non-empty `stringvalue` is the `text_value`.                                                              |
 | `raw_stage/pharma_records`     | `MEDICATION//{Variable Name}`          | `givendose` is the `numeric_value`; `doseunit` is the `text_value`. Names whose rows differ in dose unit end in `//{doseunit}` (see Units). |
 
@@ -159,7 +159,7 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 entry for its own table keeps its raw id in the code (`OBSERVATION//<variableid>//UNK`,
 `MEDICATION//<pharmaid>`). A missing sex or unit becomes `UNK`.
 
-A full run of HiRID 1.1.1 yields 33,905 admissions, 33,904 discharges, 2,062 deaths, 16.25M
+A full run of HiRID 1.1.1 yields 33,905 ICU admissions, 33,904 ICU discharges, 2,062 deaths, 16.25M
 medication events and 758.65M observation events. See
 [`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md) for every modelling choice, the numbers behind it, and
 the full-run validation.
@@ -168,9 +168,13 @@ the full-run validation.
 
 - **Deidentified dates.** HiRID shifts dates into the 22nd century while keeping chronology within a
     patient; they are emitted as supplied.
-- **ICU, not hospital.** HiRID covers ICU admissions. The `HOSPITAL_ADMISSION` / `HOSPITAL_DISCHARGE`
-    codes are kept from earlier releases; discharge and death are the last observation, not a
-    recorded time ([#4](https://github.com/rvandewater/HIRID_MEDS/issues/4)).
+- **ICU, not hospital.** HiRID covers ICU admissions: each `patientid` (the MEDS `subject_id`) is one
+    ICU (re-)admission, and a patient's readmissions cannot be linked
+    ([HiRID 1.1.1](https://physionet.org/content/hirid/1.1.1/)). The release has no hospital admission
+    or discharge, so the stay is coded `ICU_ADMISSION` / `ICU_DISCHARGE` (`HOSPITAL_ADMISSION` /
+    `HOSPITAL_DISCHARGE` up to 0.2.0, see [Breaking changes](#breaking-changes)). Discharge and death
+    are the last observation, not a recorded time
+    ([#4](https://github.com/rvandewater/HIRID_MEDS/issues/4)).
 - **Pseudo date of birth.** `age` is binned (15 values, 20–90), so `MEDS_BIRTH` can be off by up to
     ~5 years.
 - **Duplicates are collapsed.** MEDS-Extract drops events identical in every column. This removes
@@ -189,13 +193,13 @@ dictionary, joined at ETL time. The ETL adds no vocabulary parents (no `parent_c
 LOINC parents from the packaged rules file (see
 [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-| Codes                                                                  | Route                                                                                                                  | Source                                                                                                                                           |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OBSERVATION//{Variable Name}//{Unit}`                                 | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
-| `MEDICATION//{Variable Name}`                                          | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
-| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>`             | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
-| `SEX//{sex}`                                                           | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
-| `HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
+| Codes                                                        | Route                                                                                                                  | Source                                                                                                                                           |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OBSERVATION//{Variable Name}//{Unit}`                       | `_metadata` block on `hirid_variable_reference`, joined on the raw `variableid` (its `Observation` rows only)          | `Variable Name`, `Unit` and `Additional information` of your copy of the reference, read at ETL time; nothing from it is shipped                 |
+| `MEDICATION//{Variable Name}`                                | `_metadata` block on `hirid_variable_reference`, joined on the raw `pharmaid` (its `Pharma` rows only)                 | `Variable Name` of the reference, read at ETL time                                                                                               |
+| `OBSERVATION//<variableid>//UNK`, `MEDICATION//<pharmaid>`   | `_metadata: _self:` fallback, non-null only on rows of ids without a reference entry (see D3 in `DESIGN_DECISIONS.md`) | the raw id                                                                                                                                       |
+| `SEX//{sex}`                                                 | `_metadata: _self:` template                                                                                           | `general_table.sex`, documented as `M` or `F` in the [HiRID data structure docs](https://hirid.intensivecare.ai/structure-of-the-published-data) |
+| `ICU_ADMISSION`, `ICU_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH` | `_metadata: _self:` constant                                                                                           | the HiRID data structure docs and this ETL's modelling choices; a comment above each block names its source                                      |
 
 **Units.** `unit` is a string: the unit of the code's numeric values, one per code (null for codes
 without one), written in [UCUM](https://ucum.org/) by suMEDS's `sumeds_normalize_units` post-stage
@@ -243,7 +247,7 @@ reference lists German generic names only).
 block adds parent codes; `tests/test_etl.py` checks the extracted `codes.parquet` against the
 fixture and validates it against `meds.CodeMetadataSchema`.
 
-**Literal codes** (`HOSPITAL_ADMISSION`, `HOSPITAL_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
+**Literal codes** (`ICU_ADMISSION`, `ICU_DISCHARGE`, `MEDS_BIRTH`, `MEDS_DEATH`) have no
 components for an external `_metadata` block to join on. Each carries a `_self` block with a
 constant description instead (MEDS-Extract 0.8.1 and later), which also writes the literal as its
 `code_template`. Unreleased versions of this ETL filled the same descriptions in after the run, with
@@ -379,6 +383,20 @@ upgrade can also move the output, so check it with `--compare`.
 ## Breaking changes
 
 ### Unreleased
+
+- **ICU stays are coded `ICU_ADMISSION` / `ICU_DISCHARGE`.** Each HiRID `patientid` is one ICU
+    admission, and the release has no hospital admission, so the codes that marked the start and
+    end of the stay no longer say "hospital". The events, their times and their counts are
+    unchanged; only the code string (and its description) changes:
+
+    | up to 0.2.0          | from the next release |
+    | -------------------- | --------------------- |
+    | `HOSPITAL_ADMISSION` | `ICU_ADMISSION`       |
+    | `HOSPITAL_DISCHARGE` | `ICU_DISCHARGE`       |
+
+    To migrate, replace the codes, e.g. with the regex `^HOSPITAL_(ADMISSION|DISCHARGE)$` →
+    `ICU_\1`. A task or predicate written for both versions can match
+    `^(HOSPITAL|ICU)_ADMISSION$`.
 
 - `metadata/dataset.json` `dataset_name` is `HIRID` instead of `hirid`, the spec name
     (`meds-extract-run spec=HIRID`) that the suMEDS rules and MEDS-DEV (`datasets/HIRID`) also use.
