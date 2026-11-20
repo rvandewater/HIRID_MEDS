@@ -79,9 +79,7 @@ Why each choice was made, and what it changes in the output, is recorded in
 Everything the old `pre_MEDS.py` did is expressible in MESSY: archive extraction is the download
 layer's `unarchive: auto`, the pseudo date of birth is a `_table.cols` expression, and the
 last-observation discharge/death time is an aggregated join (`cols: {datetime: max}`). Users call
-`meds-extract-run spec=HIRID` directly. The one exception is the `hirid_unit_keys` pre-stage
-(`src/HIRID_MEDS/unit_keys.py`): it reduces the pharma table over its own rows (which pharmaids
-share a name with rows of another dose unit), which MESSY rejects. Keep it that way unless a
+`meds-extract-run spec=HIRID` directly; there is no Python stage. Keep it that way unless a
 transformation genuinely cannot be written in MESSY.
 
 ## Testing

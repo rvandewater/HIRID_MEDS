@@ -52,11 +52,6 @@ etl:
   # without the unit as parent, and adds a row for that parent code. (MEDS-Extract writes `unit` as
   # one string per code and fails if any code has more than one.) It runs before the other suMEDS
   # stages so that the enrichment, also a later `suMEDS-enrich`, sees the finished code list.
-  # Before the canonical pipeline, `hirid_unit_keys` (src/HIRID_MEDS/unit_keys.py) stages the
-  # side table `pharma_unit_in_code`: the pharmaids whose name is shared with rows of another dose
-  # unit, whose codes therefore end in the dose unit (see the pharma block below).
-  pre_stages:
-    - hirid_unit_keys
   post_stages:
     - sumeds_link_unit_siblings
     # One UCUM spelling for every `unit` (suMEDS's shared table, e.g. `Cel`, `mm[Hg]`, `mg/dL`); the
@@ -197,24 +192,25 @@ raw_stage/pharma_records/parquet:
         left_on: [_ref_id, _ref_table]
         right_on: [ID, Source Table]
         cols: [Variable Name]
-      # Staged by the `hirid_unit_keys` pre-stage: `unit_in_code` is true for the pharmaids whose
-      # name is shared with rows of another dose unit, null for every other pharmaid.
-      pharma_unit_in_code:
-        left_on: _ref_id
-        right_on: pharmaid
-        cols: [unit_in_code]
     cols:
       _ref_table: "'Pharma'"
       _ref_id: "$pharmaid::int64"
       variable_name: { column: Variable Name }
-      _unit_suffix: '(f"//{$doseunit ?? ''UNK''}" if $unit_in_code else "")'
+      # The dose unit as the code's last component: stripped of surrounding whitespace, and `UNK`
+      # where it is missing or blank, as MEDS-Extract compares units when it writes `codes.parquet`
+      # (stripped, blanks dropped), so ` mg` and `mg` give one code. dftly 0.7 has no strip
+      # function, so the extract takes the text from the first to the last non-whitespace
+      # character (`(?s)` lets it span line breaks), which is null when there is none.
+      _dose_unit: '(extract /(?s)\S(?:.*\S)?/ from $doseunit) ?? "UNK"'
   # The dose unit is recorded on every pharma row (`doseunit`), so it is taken from there rather
   # than from the reference table's `Unit` (empty for every `Pharma` row). It is the code's `unit`
-  # metadata, read from the event's own rows (`_self`). A code holds one unit: where pharmaids that
-  # share a name differ in dose unit, their codes end in it (`_unit_suffix`); every other code is
-  # unchanged.
+  # metadata, read from the event's own rows (`_self`), and always the code's last component (`UNK`
+  # where a row records none or a blank one), as in the observation codes, so a code has one unit by
+  # construction even where pharmaids that share a name differ in dose unit. suMEDS's
+  # `sumeds_link_unit_siblings` gives the codes of a name recorded in several units the code
+  # without the unit as a parent.
   medication:
-    code: 'f"MEDICATION//{$variable_name ?? $pharmaid::str}{$_unit_suffix}"'
+    code: f"MEDICATION//{$variable_name ?? $pharmaid::str}//{$_dose_unit}"
     time: $givenat
     numeric_value: $givendose
     text_value: $doseunit
