@@ -18,8 +18,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-# Pure-config ETL: MEDS-Extract supplies both CLIs (`meds-extract-download`, `meds-extract-run`)
-# and every extraction stage. It is capped below the next minor: MEDS-Extract 0.x minors are
+# MEDS-Extract supplies both CLIs (`meds-extract-download`, `meds-extract-run`) and every extraction
+# stage; the only Python here is the `hirid_unit_keys` pre-stage registered below. It is capped below the next minor: MEDS-Extract 0.x minors are
 # breaking (MESSY syntax, runner CLI), so raise it deliberately when migrating. 0.9.0 is the floor:
 # it writes `unit` in codes.parquet as one string per code (stripped, blanks dropped, several
 # distinct units on a code an error; MEDS_extract#336). 0.8.1 added what the config also needs: it

@@ -32,7 +32,8 @@ sources:
         - raw_stage/pharma_records_parquet.tar.gz
 
 etl:
-  dataset_name: hirid
+  # The spec name, as every other MEDS ETL writes it (and the name suMEDS falls back to for its rules).
+  dataset_name: HIRID
   n_subjects_per_shard: 1000
   # Written to metadata/dataset.json (from https://physionet.org/content/hirid/1.1.1/).
   license: PhysioNet Contributor Review Health Data License 1.5.0
