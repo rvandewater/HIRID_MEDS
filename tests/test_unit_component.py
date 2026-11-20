@@ -1,4 +1,4 @@
-"""A medication code's unit component is the dose unit stripped, and `UNK` when missing or blank.
+"""A code's unit component is the unit stripped, and `UNK` when it is missing or blank.
 
 MEDS-Extract compares units stripped and drops blank ones when it writes `codes.parquet`, so a
 code that kept the whitespace would split one unit over several codes (` mg`, `mg`, `mg `), and a
@@ -39,3 +39,28 @@ def test_dose_unit_is_stripped_and_blank_is_unk():
         "MEDICATION//Drug A//UNK",
         "MEDICATION//Drug A//UNK",
     ]
+
+
+def test_observation_unit_is_stripped_and_blank_is_unk():
+    block = yaml.safe_load(CONFIG_FP.read_text())[
+        "raw_stage/observation_tables/parquet"
+    ]
+    # `Unit` comes from the variable reference, joined onto the observation rows.
+    raw = pl.DataFrame(
+        {
+            "Unit": ["/min", " /min", "/min ", "\t/min\n", "mL / h", "  ", "", None],
+            "variable_name": ["Heart rate"] * 8,
+            "variableid": [100] * 8,
+        }
+    )
+    unit = {"_value_unit": block["_table"]["cols"]["_value_unit"]}
+    with_cols = raw.with_columns(**Parser.to_polars(unit))
+    codes = with_cols.select(
+        **Parser.to_polars({"code": block["observation"]["code"]})
+    )["code"].to_list()
+    assert (
+        codes
+        == ["OBSERVATION//Heart rate///min"] * 4
+        + ["OBSERVATION//Heart rate//mL / h"]
+        + ["OBSERVATION//Heart rate//UNK"] * 3
+    )

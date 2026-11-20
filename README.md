@@ -65,6 +65,15 @@ When you run this, the program will:
 The extraction is complete without step 3. suMEDS only adds what is missing, so the dataset's own
 descriptions are never replaced.
 
+Intermediate stage outputs are deleted after a successful run, by default: the spec sets
+MEDS-Extract's `etl.cleanup_intermediates: true`, so a finished `$MEDS_OUTPUT_DIR` holds only `data/`,
+`metadata/`, `.logs/` and `.meds_extract_run/`. A failed run keeps them, so the same command resumes
+where it stopped, and the same command on a finished output still does nothing. To keep them (to look
+at a stage's output; `$MEDS_OUTPUT_DIR/.logs/pipeline.log` keeps the stage logs either way), add
+`"overrides=['cleanup_intermediates=false']"`. Cleanup never deletes raw data: a download into the
+default `$MEDS_OUTPUT_DIR/.meds_extract_run/raw_input` stays, and `download_dest_dir=` elsewhere lets other
+output directories reuse it.
+
 ### Using an existing download
 
 If you already have the release on disk, skip the download with `do_download=false` and point
@@ -156,8 +165,8 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 `Variable Name` and `Unit` come from `hirid_variable_reference`, matched on the raw id **and** its
 `Source Table`, since one id is listed as both an observation and a drug. An id with no reference
 entry for its own table keeps its raw id in the code (`OBSERVATION//<variableid>//UNK`,
-`MEDICATION//<pharmaid>//<doseunit>`). A missing sex or unit becomes `UNK`; a dose unit in a code is
-stripped of surrounding whitespace, and a blank one is `UNK` too.
+`MEDICATION//<pharmaid>//<doseunit>`). A missing sex becomes `UNK`. A unit in a code (`Unit` or
+`doseunit`) is stripped of surrounding whitespace; missing or blank is `UNK`.
 
 A full run of HiRID 1.1.1 yields 33,905 ICU admissions, 33,904 ICU discharges, 2,062 deaths, 16.25M
 medication events and 758.65M observation events. See
@@ -216,7 +225,7 @@ dose units, which the data records anyway.
 
 Medication codes always end in their dose unit (`MEDICATION//{Variable Name}//{doseunit}`; the unit
 is stripped of surrounding whitespace, and a missing or blank one is `UNK`), as observation codes
-end in their `Unit`. The stripping matches how MEDS-Extract compares units when it writes `unit`
+end in their `Unit` (stripped the same way). The stripping matches how MEDS-Extract compares units when it writes `unit`
 (stripped, blanks dropped), so ` mg` and `mg` give one code. Every pharmaid has one dose unit,
 but pharmaids that share a name may not; with the unit in every code, each code has one unit by
 construction, and no stage has to find the names whose rows differ in dose unit. On HiRID 1.1.1 one
@@ -229,7 +238,10 @@ than one unit. suMEDS's shared post-stage `sumeds_link_unit_siblings`
 only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
 (`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit,
 the description its siblings share (or, if they differ only by their own unit, that description
-without it), and the parents they all have. HiRID uses the stage's default options, so a
+without it), and the parents they all have. With `link_single_units: true`, a code ending in its
+unit gets its stem also when its item has a single unit (`MEDICATION//X//mg` gets `MEDICATION//X`), so
+every medication and observation code with a recorded unit has its unit-free stem. HiRID uses the
+stage's default options otherwise, so a
 `MEDICATION//X//UNK` code also gets `MEDICATION//X` once `X` has a real unit. The post-stages run in
 this order: `sumeds_link_unit_siblings`, `sumeds_normalize_units`, `sumeds_enrich`. On HiRID 1.1.1
 the ETL's own copy of this step (before suMEDS 0.6.6) found 1 group of 3 codes and added 1 row.
@@ -383,6 +395,32 @@ upgrade can also move the output, so check it with `--compare`.
 ## Breaking changes
 
 ### Unreleased
+
+- **Intermediate stage outputs are no longer kept.** Up to 0.2.0, a run left each stage's output in
+    `<output_dir>/<stage>/` (`convert_to_parquet/`, `convert_to_MEDS_events/`, `hirid_unit_keys/`, `sumeds_enrich/`, …). The spec now sets MEDS-Extract's
+    `etl.cleanup_intermediates: true`, so a successful run deletes those directories and keeps only
+    `data/`, `metadata/`, `.logs/` and `.meds_extract_run/`. The MEDS data and metadata are
+    unchanged. To migrate, add `"overrides=['cleanup_intermediates=false']"` to `meds-extract-run`
+    wherever you read a stage directory after the run.
+
+- **`codes.parquet` gains unit-free stem rows and stem parents for single-unit codes**
+    ([#28](https://github.com/rvandewater/HIRID_MEDS/pull/28)). suMEDS's `sumeds_link_unit_siblings` now runs with `link_single_units: true`:
+    every code that ends in its unit gets the code without the unit (its stem) as its last
+    `parent_codes` entry, and the stem gets a row of its own (no unit, no events), also when the
+    item has a single unit (`MEDICATION//{name}//{doseunit}` gets `MEDICATION//{name}`, `OBSERVATION//{name}//{unit}` gets `OBSERVATION//{name}`). Before, only items recorded in two or more units did.
+    Events are unchanged. On a synthetic (MESSY-synth) build, 11 codes gain a stem parent and 11 stem rows are added (8 `OBSERVATION`, 3 `MEDICATION`). To migrate, nothing is needed unless a tool expects every
+    `codes.parquet` row to have events: drop the stem rows (no `code_template`, no `unit`), or
+    ignore a parent that is the code without its last `//` component.
+
+- **The unit of an observation code is stripped of surrounding whitespace, and a blank one is
+    `UNK`**: `OBSERVATION//{Variable Name}//{Unit}`, with `Unit` from `hirid_variable_reference`, as
+    the medication codes below already do with their dose unit. Before, the reference's `Unit` was
+    copied as recorded: a padded unit (` mmol/l`) gave a code ending in that whitespace, and a blank
+    or empty one gave a code ending in whitespace or in `//` instead of `//UNK`. The unit in the
+    description's brackets is stripped too (`[no unit]` for a blank one). No output change on the
+    synthetic data; codes change only where a unit was padded or blank. To migrate, strip the last
+    component of an old code and write `UNK` for an empty one:
+    `^(OBSERVATION//.*//)\s*(\S(?:.*\S)?)?\s*$` → `\1\2`, then a trailing `//` → `//UNK`.
 
 - **Every medication code ends in its dose unit**: `MEDICATION//{Variable Name}//{doseunit}` (and
     `MEDICATION//<pharmaid>//{doseunit}` for a pharmaid without a reference entry), with the unit

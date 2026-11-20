@@ -34,6 +34,8 @@ sources:
 etl:
   # The spec name, as every other MEDS ETL writes it (and the name suMEDS falls back to for its rules).
   dataset_name: HIRID
+  # Delete the <output_dir>/<stage> dirs after a successful run; keep: "overrides=['cleanup_intermediates=false']"
+  cleanup_intermediates: true
   n_subjects_per_shard: 1000
   # Written to metadata/dataset.json (from https://physionet.org/content/hirid/1.1.1/).
   license: PhysioNet Contributor Review Health Data License 1.5.0
@@ -44,14 +46,16 @@ etl:
   # codes.parquet as the ETL wrote it and does not fail the run; `suMEDS-enrich OUTPUT_DIR` finishes
   # it later. `skip_stages=[sumeds_enrich]` leaves it out of a run.
   #
-  # First, suMEDS's shared `sumeds_link_unit_siblings` stage (default options;
-  # https://github.com/rvandewater/suMEDS/blob/main/docs/unit_siblings.md) gives codes that differ
+  # First, suMEDS's shared `sumeds_link_unit_siblings` stage
+  # (https://github.com/rvandewater/suMEDS/blob/main/docs/unit_siblings.md) gives codes that differ
   # only in their unit (and a `//UNK` code of the same item, once it has a real unit) the code
-  # without the unit as parent, and adds a row for that parent code. (MEDS-Extract writes `unit` as
+  # without the unit as parent, and adds a row for that parent code; with `link_single_units`, so
+  # does a code ending in its unit whose item has one unit. (MEDS-Extract writes `unit` as
   # one string per code and fails if any code has more than one.) It runs before the other suMEDS
   # stages so that the enrichment, also a later `suMEDS-enrich`, sees the finished code list.
   post_stages:
-    - sumeds_link_unit_siblings
+    - sumeds_link_unit_siblings:
+        link_single_units: true
     # One UCUM spelling for every `unit` (suMEDS's shared table, e.g. `Cel`, `mm[Hg]`, `mg/dL`); the
     # spelling as recorded stays in `unit_source_value`, and an unknown spelling is kept as it is.
     - sumeds_normalize_units
@@ -178,9 +182,10 @@ general_table:
 #
 # The reference's `Variable Name` column contains a space, which dftly's `$name` shorthand cannot
 # express; the explicit `{column: ...}` form can, so `_table.cols` aliases it once.
-# See https://github.com/mmcdermott/dftly/issues/96. `Unit` needs no alias and the observation code
-# reads it as `$Unit`: a code component named `unit` would turn the metadata output `unit` below
-# into a join key (MEDS-Extract treats a `_metadata` entry named like a component as a key).
+# See https://github.com/mmcdermott/dftly/issues/96. `Unit` needs no alias; the observation code
+# reads it stripped, through `_value_unit`. A code component named `unit` would turn the metadata
+# output `unit` below into a join key (MEDS-Extract treats a `_metadata` entry named like a
+# component as a key).
 # ---------------------------------------------------------------------------
 
 raw_stage/pharma_records/parquet:
@@ -235,22 +240,27 @@ raw_stage/observation_tables/parquet:
       _ref_table: "'Observation'"
       _ref_id: "$variableid::int64"
       variable_name: { column: Variable Name }
+      # The variable's unit (from the reference) as the code's last component, stripped of
+      # surrounding whitespace and `UNK` where it is missing or blank, as `_dose_unit` above.
+      _value_unit: '(extract /(?s)\S(?:.*\S)?/ from $Unit) ?? "UNK"'
   # `stringvalue` is an empty string (not null) on almost every numeric row; only a real string
   # is kept as the text value.
   observation:
-    code: 'f"OBSERVATION//{$variable_name ?? $variableid::str}//{$Unit ?? ''UNK''}"'
+    code: f"OBSERVATION//{$variable_name ?? $variableid::str}//{$_value_unit}"
     time: $datetime
     numeric_value: $value
     text_value: '$stringvalue if $stringvalue != ""'
     _metadata:
       hirid_variable_reference:
         variableid: $ID
+        # The unit in brackets is stripped, as in the code; `no unit` where it is missing or blank.
         description: >-
-          (f"{$`Variable Name`} [{$Unit ?? 'no unit'}]; {$`Additional information`} (HiRID
-          observation_tables, name and unit of the variableid in hirid_variable_reference)" if
-          $`Additional information` != "" else f"{$`Variable Name`} [{$Unit ?? 'no unit'}] (HiRID
-          observation_tables, name and unit of the variableid in hirid_variable_reference)") if
-          $`Source Table` == "Observation"
+          (f"{$`Variable Name`} [{(extract /(?s)\S(?:.*\S)?/ from $Unit) ?? 'no unit'}];
+          {$`Additional information`} (HiRID observation_tables, name and unit of the variableid in
+          hirid_variable_reference)" if $`Additional information` != "" else f"{$`Variable Name`}
+          [{(extract /(?s)\S(?:.*\S)?/ from $Unit) ?? 'no unit'}] (HiRID observation_tables, name
+          and unit of the variableid in hirid_variable_reference)") if $`Source Table` ==
+          "Observation"
         # The unit of the variableid as the reference records it (null for unitless variables).
         unit: $Unit if $`Source Table` == "Observation"
       _self:
