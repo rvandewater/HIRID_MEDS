@@ -66,7 +66,8 @@ def write_raw_fixture(root: Path) -> None:
                 "Drug B",
                 "Drug A",
             ],
-            "Unit": ["/min", None, "mmol/l", None, None, None],
+            # GCS's unit is blank and Lab A's is padded: their codes end in `UNK` and `mmol/l`.
+            "Unit": ["/min", "  ", " mmol/l", None, None, None],
             "Additional information": [None, None, "from a drain", None, None, None],
         }
     ).write_csv(root / "hirid_variable_reference.csv")

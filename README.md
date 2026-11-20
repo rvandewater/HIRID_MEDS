@@ -156,8 +156,8 @@ Everything the pre-0.7 `pre_MEDS.py` did is now config:
 `Variable Name` and `Unit` come from `hirid_variable_reference`, matched on the raw id **and** its
 `Source Table`, since one id is listed as both an observation and a drug. An id with no reference
 entry for its own table keeps its raw id in the code (`OBSERVATION//<variableid>//UNK`,
-`MEDICATION//<pharmaid>//<doseunit>`). A missing sex or unit becomes `UNK`; a dose unit in a code is
-stripped of surrounding whitespace, and a blank one is `UNK` too.
+`MEDICATION//<pharmaid>//<doseunit>`). A missing sex becomes `UNK`. A unit in a code (`Unit` or
+`doseunit`) is stripped of surrounding whitespace; missing or blank is `UNK`.
 
 A full run of HiRID 1.1.1 yields 33,905 ICU admissions, 33,904 ICU discharges, 2,062 deaths, 16.25M
 medication events and 758.65M observation events. See
@@ -216,7 +216,7 @@ dose units, which the data records anyway.
 
 Medication codes always end in their dose unit (`MEDICATION//{Variable Name}//{doseunit}`; the unit
 is stripped of surrounding whitespace, and a missing or blank one is `UNK`), as observation codes
-end in their `Unit`. The stripping matches how MEDS-Extract compares units when it writes `unit`
+end in their `Unit` (stripped the same way). The stripping matches how MEDS-Extract compares units when it writes `unit`
 (stripped, blanks dropped), so ` mg` and `mg` give one code. Every pharmaid has one dose unit,
 but pharmaids that share a name may not; with the unit in every code, each code has one unit by
 construction, and no stage has to find the names whose rows differ in dose unit. On HiRID 1.1.1 one
@@ -383,6 +383,16 @@ upgrade can also move the output, so check it with `--compare`.
 ## Breaking changes
 
 ### Unreleased
+
+- **The unit of an observation code is stripped of surrounding whitespace, and a blank one is
+    `UNK`**: `OBSERVATION//{Variable Name}//{Unit}`, with `Unit` from `hirid_variable_reference`, as
+    the medication codes below already do with their dose unit. Before, the reference's `Unit` was
+    copied as recorded: a padded unit (` mmol/l`) gave a code ending in that whitespace, and a blank
+    or empty one gave a code ending in whitespace or in `//` instead of `//UNK`. The unit in the
+    description's brackets is stripped too (`[no unit]` for a blank one). No output change on the
+    synthetic data; codes change only where a unit was padded or blank. To migrate, strip the last
+    component of an old code and write `UNK` for an empty one:
+    `^(OBSERVATION//.*//)\s*(\S(?:.*\S)?)?\s*$` → `\1\2`, then a trailing `//` → `//UNK`.
 
 - **Every medication code ends in its dose unit**: `MEDICATION//{Variable Name}//{doseunit}` (and
     `MEDICATION//<pharmaid>//{doseunit}` for a pharmaid without a reference entry), with the unit
