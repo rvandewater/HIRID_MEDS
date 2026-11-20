@@ -336,7 +336,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development and release workflo
 synthetic ETL locally:
 
 ```bash
-uv pip install "MESSY_synth==0.1.0"
+uv pip install "MESSY_synth==0.1.1"
 uv run MESSY-synth HIRID -o raw_synthetic/ --explain
 uv run meds-extract-run spec=HIRID output_dir=./HIRID_meds_synth input_dir=raw_synthetic do_download=false
 ```

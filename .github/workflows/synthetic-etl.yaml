@@ -44,12 +44,12 @@ jobs:
         run: uv sync --locked
 
       - name: Generate synthetic data
-        # MESSY_synth 0.1.0 loads the config with MEDS-Extract 0.8 and adopts join keys through
+        # MESSY_synth 0.1.1 loads the config with MEDS-Extract 0.9 and adopts join keys through
         # derived columns (mmcdermott/MESSY_synth#16), which the variable-reference join is keyed on
         # (a `Source Table` literal and a cast id). So it reads the shipped config, by its registered
         # name, in the project environment: with the locked MEDS-Extract the extraction runs on.
         run: |
-          uv pip install --python .venv/bin/python "MESSY_synth==0.1.0"
+          uv pip install --python .venv/bin/python "MESSY_synth==0.1.1"
           uv run --locked MESSY-synth HIRID -o raw_synthetic/ --explain
 
       - name: Extract synthetic data

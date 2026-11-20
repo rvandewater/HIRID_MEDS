@@ -179,7 +179,7 @@ Each has a GitHub issue with the options and the data behind them.
     `pharma_records.recordstatus`/`typeid`/`infusionid` are ignored, as before. Some of these likely
     mark invalidated or corrected records.
 - **`UNK` placeholders** ([#6](https://github.com/rvandewater/HIRID_MEDS/issues/6), D11): keep `UNK` for "no unit", or omit the component?
-- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow installs MESSY_synth 0.1.0
+- **CI with synthetic data** ([#7](https://github.com/rvandewater/HIRID_MEDS/issues/7)). The synthetic workflow installs MESSY_synth 0.1.1
     and generates from the shipped config. `tests/test_etl.py` checks specific values on a
     hand-written fixture.
 
