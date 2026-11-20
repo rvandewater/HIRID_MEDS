@@ -65,6 +65,15 @@ When you run this, the program will:
 The extraction is complete without step 3. suMEDS only adds what is missing, so the dataset's own
 descriptions are never replaced.
 
+Intermediate stage outputs are deleted after a successful run, by default: the spec sets
+MEDS-Extract's `etl.cleanup_intermediates: true`, so a finished `$MEDS_OUTPUT_DIR` holds only `data/`,
+`metadata/`, `.logs/` and `.meds_extract_run/`. A failed run keeps them, so the same command resumes
+where it stopped, and the same command on a finished output still does nothing. To keep them (to look
+at a stage's output; `$MEDS_OUTPUT_DIR/.logs/pipeline.log` keeps the stage logs either way), add
+`"overrides=['cleanup_intermediates=false']"`. Cleanup never deletes raw data: a download into the
+default `$MEDS_OUTPUT_DIR/.meds_extract_run/raw_input` stays, and `download_dest_dir=` elsewhere lets other
+output directories reuse it.
+
 ### Using an existing download
 
 If you already have the release on disk, skip the download with `do_download=false` and point
@@ -382,6 +391,13 @@ upgrade can also move the output, so check it with `--compare`.
 ## Breaking changes
 
 ### Unreleased
+
+- **Intermediate stage outputs are no longer kept.** Up to 0.2.0, a run left each stage's output in
+    `<output_dir>/<stage>/` (`convert_to_parquet/`, `convert_to_MEDS_events/`, `hirid_unit_keys/`, `sumeds_enrich/`, …). The spec now sets MEDS-Extract's
+    `etl.cleanup_intermediates: true`, so a successful run deletes those directories and keeps only
+    `data/`, `metadata/`, `.logs/` and `.meds_extract_run/`. The MEDS data and metadata are
+    unchanged. To migrate, add `"overrides=['cleanup_intermediates=false']"` to `meds-extract-run`
+    wherever you read a stage directory after the run.
 
 - **ICU stays are coded `ICU_ADMISSION` / `ICU_DISCHARGE`.** Each HiRID `patientid` is one ICU
     admission, and the release has no hospital admission, so the codes that marked the start and

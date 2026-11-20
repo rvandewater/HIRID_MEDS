@@ -33,6 +33,8 @@ sources:
 
 etl:
   dataset_name: hirid
+  # Delete the <output_dir>/<stage> dirs after a successful run; keep: "overrides=['cleanup_intermediates=false']"
+  cleanup_intermediates: true
   n_subjects_per_shard: 1000
   # Written to metadata/dataset.json (from https://physionet.org/content/hirid/1.1.1/).
   license: PhysioNet Contributor Review Health Data License 1.5.0
