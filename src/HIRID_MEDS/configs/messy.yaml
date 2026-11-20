@@ -43,17 +43,19 @@ etl:
   # codes.parquet as the ETL wrote it and does not fail the run; `suMEDS-enrich OUTPUT_DIR` finishes
   # it later. `skip_stages=[sumeds_enrich]` leaves it out of a run.
   #
-  # First, `hirid_unit_metadata` (src/HIRID_MEDS/unit_metadata.py) gives codes that differ only in
-  # their unit the code without the unit as parent, and adds a row for that parent code.
-  # (MEDS-Extract writes `unit` as one string per code and fails if any code has more than one.) It runs before suMEDS so that the enrichment, also a later
-  # `suMEDS-enrich`, sees the finished code list.
+  # First, suMEDS's shared `sumeds_link_unit_siblings` stage (default options;
+  # https://github.com/rvandewater/suMEDS/blob/main/docs/unit_siblings.md) gives codes that differ
+  # only in their unit (and a `//UNK` code of the same item, once it has a real unit) the code
+  # without the unit as parent, and adds a row for that parent code. (MEDS-Extract writes `unit` as
+  # one string per code and fails if any code has more than one.) It runs before the other suMEDS
+  # stages so that the enrichment, also a later `suMEDS-enrich`, sees the finished code list.
   # Before the canonical pipeline, `hirid_unit_keys` (src/HIRID_MEDS/unit_keys.py) stages the
   # side table `pharma_unit_in_code`: the pharmaids whose name is shared with rows of another dose
   # unit, whose codes therefore end in the dose unit (see the pharma block below).
   pre_stages:
     - hirid_unit_keys
   post_stages:
-    - hirid_unit_metadata
+    - sumeds_link_unit_siblings
     # One UCUM spelling for every `unit` (suMEDS's shared table, e.g. `Cel`, `mm[Hg]`, `mg/dL`); the
     # spelling as recorded stays in `unit_source_value`, and an unknown spelling is kept as it is.
     - sumeds_normalize_units

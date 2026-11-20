@@ -51,7 +51,8 @@ EXPECTED_PARENTS = {
     "OBSERVATION//Heart rate///min": ["LOINC//8867-4"],
     "OBSERVATION//999//UNK": ["LOINC//2160-0"],
 }
-# The in-dataset parents of unit siblings, added by the post-stage that runs before suMEDS.
+# The in-dataset parents of unit siblings, added by suMEDS's `sumeds_link_unit_siblings`, which runs
+# before the enrichment.
 UNIT_SIBLING_PARENTS = {
     "MEDICATION//Drug A//mg": ["MEDICATION//Drug A"],
     "MEDICATION//Drug A//ml": ["MEDICATION//Drug A"],

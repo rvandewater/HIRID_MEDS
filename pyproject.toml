@@ -29,10 +29,11 @@ classifiers = [
 # enriches the code metadata with the rules registered below. A failed enrichment is a warning that
 # keeps the ETL output (e.g. without internet), and `metadata/dataset.json` records whether the
 # build was enriched. 0.6 writes the relationship names as code-to-name maps. It is capped below the
-# next minor for the same reason (its rules format and CLI are 0.x).
+# next minor for the same reason (its rules format and CLI are 0.x). 0.6.6 registers
+# `sumeds_link_unit_siblings`, the post-stage that links codes that differ only in their unit.
 dependencies = [
     "MEDS-extract[download]>=0.9.0,<0.10",
-    "sumeds>=0.6.5,<0.7",
+    "sumeds>=0.6.6,<0.7",
 ]
 
 [project.optional-dependencies]
@@ -44,11 +45,10 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 [project.entry-points."MEDS_extract.pipelines"]
 HIRID = "HIRID_MEDS.configs:messy.yaml"
 
-# Registers the unit steps as MEDS-Transforms stages, so the config can declare them: the
-# pre-stage that finds the medication codes needing their dose unit in the code, and the
-# post-stage that links codes in codes.parquet that differ only in their unit.
+# Registers the unit pre-stage as a MEDS-Transforms stage, so the config can declare it: it finds
+# the medication codes needing their dose unit in the code. Codes in codes.parquet that differ
+# only in their unit are linked by suMEDS's `sumeds_link_unit_siblings` post-stage.
 [project.entry-points."MEDS_transforms.stages"]
-hirid_unit_metadata = "HIRID_MEDS.unit_metadata:main"
 hirid_unit_keys = "HIRID_MEDS.unit_keys:main"
 
 # Registers the suMEDS rules under the same name, so the config's `sumeds_enrich: {rules: HIRID}`
