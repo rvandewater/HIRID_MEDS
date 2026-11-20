@@ -238,7 +238,10 @@ than one unit. suMEDS's shared post-stage `sumeds_link_unit_siblings`
 only in their unit (`MEDICATION//X//mg`, `MEDICATION//X//ml`) the code without the unit
 (`MEDICATION//X`) as an in-dataset parent in `parent_codes`, and adds a row for that code: no unit,
 the description its siblings share (or, if they differ only by their own unit, that description
-without it), and the parents they all have. HiRID uses the stage's default options, so a
+without it), and the parents they all have. With `link_single_units: true`, a code ending in its
+unit gets its stem also when its item has a single unit (`MEDICATION//X//mg` gets `MEDICATION//X`), so
+every medication and observation code with a recorded unit has its unit-free stem. HiRID uses the
+stage's default options otherwise, so a
 `MEDICATION//X//UNK` code also gets `MEDICATION//X` once `X` has a real unit. The post-stages run in
 this order: `sumeds_link_unit_siblings`, `sumeds_normalize_units`, `sumeds_enrich`. On HiRID 1.1.1
 the ETL's own copy of this step (before suMEDS 0.6.6) found 1 group of 3 codes and added 1 row.
@@ -393,6 +396,22 @@ upgrade can also move the output, so check it with `--compare`.
 
 ### Unreleased
 
+- **Intermediate stage outputs are no longer kept.** Up to 0.2.0, a run left each stage's output in
+    `<output_dir>/<stage>/` (`convert_to_parquet/`, `convert_to_MEDS_events/`, `hirid_unit_keys/`, `sumeds_enrich/`, …). The spec now sets MEDS-Extract's
+    `etl.cleanup_intermediates: true`, so a successful run deletes those directories and keeps only
+    `data/`, `metadata/`, `.logs/` and `.meds_extract_run/`. The MEDS data and metadata are
+    unchanged. To migrate, add `"overrides=['cleanup_intermediates=false']"` to `meds-extract-run`
+    wherever you read a stage directory after the run.
+
+- **`codes.parquet` gains unit-free stem rows and stem parents for single-unit codes**
+    ([#28](https://github.com/rvandewater/HIRID_MEDS/pull/28)). suMEDS's `sumeds_link_unit_siblings` now runs with `link_single_units: true`:
+    every code that ends in its unit gets the code without the unit (its stem) as its last
+    `parent_codes` entry, and the stem gets a row of its own (no unit, no events), also when the
+    item has a single unit (`MEDICATION//{name}//{doseunit}` gets `MEDICATION//{name}`, `OBSERVATION//{name}//{unit}` gets `OBSERVATION//{name}`). Before, only items recorded in two or more units did.
+    Events are unchanged. On a synthetic (MESSY-synth) build, 11 codes gain a stem parent and 11 stem rows are added (8 `OBSERVATION`, 3 `MEDICATION`). To migrate, nothing is needed unless a tool expects every
+    `codes.parquet` row to have events: drop the stem rows (no `code_template`, no `unit`), or
+    ignore a parent that is the code without its last `//` component.
+
 - **The unit of an observation code is stripped of surrounding whitespace, and a blank one is
     `UNK`**: `OBSERVATION//{Variable Name}//{Unit}`, with `Unit` from `hirid_variable_reference`, as
     the medication codes below already do with their dose unit. Before, the reference's `Unit` was
@@ -427,13 +446,6 @@ upgrade can also move the output, so check it with `--compare`.
     component (`^(MEDICATION//.*)//.*$` → `\1`, the greedy group ending at the last `//`) to compare
     with an old code, or match all codes of a drug in both versions with
     `^MEDICATION//<name>(//.*)?$`.
-
-- **Intermediate stage outputs are no longer kept.** Up to 0.2.0, a run left each stage's output in
-    `<output_dir>/<stage>/` (`convert_to_parquet/`, `convert_to_MEDS_events/`, `hirid_unit_keys/`, `sumeds_enrich/`, …). The spec now sets MEDS-Extract's
-    `etl.cleanup_intermediates: true`, so a successful run deletes those directories and keeps only
-    `data/`, `metadata/`, `.logs/` and `.meds_extract_run/`. The MEDS data and metadata are
-    unchanged. To migrate, add `"overrides=['cleanup_intermediates=false']"` to `meds-extract-run`
-    wherever you read a stage directory after the run.
 
 - **ICU stays are coded `ICU_ADMISSION` / `ICU_DISCHARGE`.** Each HiRID `patientid` is one ICU
     admission, and the release has no hospital admission, so the codes that marked the start and

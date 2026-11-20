@@ -102,10 +102,13 @@ def test_code_metadata(meds: pl.DataFrame, meds_dir: Path):
     table = pq.read_table(meds_dir / "metadata" / "codes.parquet")
     CodeMetadataSchema.validate(table)
     # The ETL adds no vocabulary parents; suMEDS adds LOINC parents from `sumeds_rules.yaml`
-    # (tests/test_run_with_enrichment.py). The only parents are the in-dataset ones of unit
-    # siblings (test_code_units).
+    # (tests/test_run_with_enrichment.py). The only parents are the in-dataset unit-free stems of
+    # codes ending in their unit (test_code_units).
     assert {p for ps in table["parent_codes"].to_pylist() if ps for p in ps} == {
-        "MEDICATION//Drug A"
+        "MEDICATION//Drug A",
+        "MEDICATION//Drug B",
+        "OBSERVATION//Heart rate",
+        "OBSERVATION//Lab A",
     }
     by_code = {r["code"]: r for r in pl.from_arrow(table).iter_rows(named=True)}
     assert set(meds["code"]) <= set(by_code)
@@ -186,8 +189,8 @@ def test_code_units(meds: pl.DataFrame, meds_dir: Path):
         "MEDICATION//Drug B//ml",
     }
     # Codes that differ only in their unit get the code without the unit as parent, with a row
-    # of its own: no unit, the siblings' shared description. A code without a unit sibling gets
-    # no parent.
+    # of its own: no unit, the siblings' shared description. With `link_single_units`, so does a
+    # code in a single unit; a code without a recorded unit (`//UNK`) and no sibling does not.
     assert units["MEDICATION//Drug A"] is None
     descriptions = dict(zip(codes["code"], codes["description"], strict=True))
     assert descriptions["MEDICATION//Drug A"] == descriptions["MEDICATION//Drug A//mg"]
@@ -195,8 +198,10 @@ def test_code_units(meds: pl.DataFrame, meds_dir: Path):
     parents = dict(zip(codes["code"], codes["parent_codes"].to_list(), strict=True))
     assert parents["MEDICATION//Drug A//mg"] == ["MEDICATION//Drug A"]
     assert parents["MEDICATION//Drug A//ml"] == ["MEDICATION//Drug A"]
-    assert parents["MEDICATION//Drug B//ml"] is None
-    assert parents["OBSERVATION//Lab A//mmol/l"] is None
+    assert parents["MEDICATION//Drug B//ml"] == ["MEDICATION//Drug B"]
+    assert parents["OBSERVATION//Lab A//mmol/l"] == ["OBSERVATION//Lab A"]
+    assert units["MEDICATION//Drug B"] is None
+    assert parents["OBSERVATION//GCS//UNK"] is None
     assert parents["MEDICATION//Drug A"] is None
     assert "MEDICATION//Drug A" not in set(meds["code"])  # a metadata row only
     assert units["SEX//F"] is None
