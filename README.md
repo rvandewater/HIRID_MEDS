@@ -394,7 +394,15 @@ upgrade can also move the output, so check it with `--compare`.
 
 ## Breaking changes
 
-### Unreleased
+### 0.3.0 (2026-11-20)
+
+- Rebuilt on the full release; `tests/regression/full_summary_stats.json` regenerated.
+
+- **`unit` in `metadata/codes.parquet` is written in UCUM**, by suMEDS's `sumeds_normalize_units`
+    post-stage (`mmol/l` becomes `mmol/L`, `ml` becomes `mL`), and the new column `unit_source_value` keeps the spelling
+    the release records. A spelling suMEDS does not know is kept as it is. Codes and events are
+    unchanged; only the `unit` column of `codes.parquet` changes. To migrate, read
+    `unit_source_value` where you read `unit` before.
 
 - **Intermediate stage outputs are no longer kept.** Up to 0.2.0, a run left each stage's output in
     `<output_dir>/<stage>/` (`convert_to_parquet/`, `convert_to_MEDS_events/`, `hirid_unit_keys/`, `sumeds_enrich/`, …). The spec now sets MEDS-Extract's
@@ -431,12 +439,12 @@ upgrade can also move the output, so check it with `--compare`.
     per-unit codes (see [Code metadata](#code-metadata)). Events, values, times and each code's
     `unit`, `unit_source_value`, description and other parents are unchanged; only the code string changes.
     On HiRID 1.1.1, `doseunit` is never null and each pharmaid has one, so every medication code
-    except the three of the one name recorded in several units gains `//<doseunit>`, and the number
-    of codes stays the same (confirming the exact counts needs a credentialed rebuild). On a
+    gains `//<doseunit>`. The one name recorded in three dose units now gives three codes, so the
+    full release has 656 codes with events instead of 654 (and 637 stem rows). On a
     synthetic MESSY-synth build, 60 of the 140 medication codes change name and become 63 (3 codes
     whose rows mix a unit with none become `…//<unit>` and `…//UNK`, with the old code as parent).
 
-    | up to 0.2.0                      | from the next release                       |
+    | up to 0.2.0                      | from 0.3.0                                  |
     | -------------------------------- | ------------------------------------------- |
     | `MEDICATION//{Variable Name}`    | `MEDICATION//{Variable Name}//{doseunit}`   |
     | `MEDICATION//<pharmaid>`         | `MEDICATION//<pharmaid>//{doseunit}`        |
@@ -452,10 +460,10 @@ upgrade can also move the output, so check it with `--compare`.
     end of the stay no longer say "hospital". The events, their times and their counts are
     unchanged; only the code string (and its description) changes:
 
-    | up to 0.2.0          | from the next release |
-    | -------------------- | --------------------- |
-    | `HOSPITAL_ADMISSION` | `ICU_ADMISSION`       |
-    | `HOSPITAL_DISCHARGE` | `ICU_DISCHARGE`       |
+    | up to 0.2.0          | from 0.3.0      |
+    | -------------------- | --------------- |
+    | `HOSPITAL_ADMISSION` | `ICU_ADMISSION` |
+    | `HOSPITAL_DISCHARGE` | `ICU_DISCHARGE` |
 
     To migrate, replace the codes, e.g. with the regex `^HOSPITAL_(ADMISSION|DISCHARGE)$` →
     `ICU_\1`. A task or predicate written for both versions can match
